@@ -8,14 +8,13 @@ import importlib
 
 import torch
 
-from enflow.flow.loss import Alchemical_NLL
-from enflow.nn.egcl import EGCL
-from enflow.nn.argmax import ArgMax
-from enflow.data.sdf import SDFDataset
-from enflow.data.base import DataLoader
-from enflow.data import transforms
-from enflow.utils.conversion import dist_to_lj, kelvin_to_lj, time_to_lj, lj_to_dist, lj_to_kelvin
-from enflow.utils.constants import sigma
+from .flow.loss import Alchemical_NLL
+from .nn.egcl import EGCL
+from .data.sdf import SDFDataset
+from .data.base import DataLoader
+from .data import transforms
+from .utils.conversion import dist_to_lj, kelvin_to_lj, time_to_lj, lj_to_dist, lj_to_kelvin
+from .utils.constants import sigma
 
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
@@ -65,7 +64,7 @@ class Main:
     
     def _setup_dataset(self, dataset_label, args):
         dataset_type = args[dataset_label]['type']
-        dataset_class = getattr(importlib.import_module(f"enflow.data.{dataset_type}"), f"{dataset_type.upper()}Dataset")
+        dataset_class = getattr(importlib.import_module(f"alchemist.data.{dataset_type}"), f"{dataset_type.upper()}Dataset")
         dataset_args = {i:args[dataset_label][i] for i in args[dataset_label] if (i!='batch_size' and i!='type')}
         
         dataset_args['dist_unit'] = args['units']['dist']
@@ -130,7 +129,7 @@ class Main:
             datasets = []
             for i in range(n_dataset):
                 datasets.append(self._setup_dataset(f'dataset{i+1}', args))
-            from enflow.data.base import ComposeDatasets
+            from alchemist.data.base import ComposeDatasets
             self.dataset = ComposeDatasets(datasets)
         else:
             self.dataset = self._setup_dataset('dataset', args)
@@ -149,8 +148,8 @@ class Main:
         
         networks = []
         for i in range(self.n_iter): networks.append(EGCL(node_nf, node_nf, self.hidden_nf))
-        integrator_class = getattr(importlib.import_module(f"enflow.flow.dynamics"), f"{self.integrator.upper()}Integrator")
-        self.model = integrator_class(networks, ArgMax(node_nf, self.hidden_nf), dt=dt).to(self.local_rank)
+        integrator_class = getattr(importlib.import_module(f"alchemist.flow.dynamics"), f"{self.integrator.upper()}Integrator")
+        self.model = integrator_class(network=network, n_iter=n_iter, dt=dt).to(self.local_rank)
         
         if checkpoint:
             self.model.load_state_dict(checkpoint['model_state_dict'])
