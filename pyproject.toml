@@ -1,5 +1,5 @@
 [project]
-name = "Alchemist"
+name = "alchemist-nn"
 version = "0.2.0"
 description = ""
 authors = [{name="Bharath Raghavan", email="anonymous@author.com"},
@@ -17,6 +17,11 @@ dependencies = [
   "pyyaml",
   "pydantic",
   "torch>=2.0",
+]
+
+[tool.poetry]
+packages = [
+    { include = "alchemist" }
 ]
 
 [project.scripts]

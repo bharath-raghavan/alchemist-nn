@@ -1,6 +1,5 @@
 import math
 import torch
-import numpy as np    
 
 class BaseFlow(torch.nn.Module):
     def __init__(self, networks, dequant_network, dt):
