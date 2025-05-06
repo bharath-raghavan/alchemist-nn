@@ -14,13 +14,14 @@ from openmm import (
     Vec3,
 )
 
-def mk_system(nparticles, mass, sigma, epsilon, box_edge):
+def mk_system(nparticles, mass, sigma, epsilon, box_edge, cutoff):
     system = System()
 
     system.setDefaultPeriodicBoxVectors(Vec3(box_edge, 0, 0),
                                         Vec3(0, box_edge, 0),
                                         Vec3(0, 0, box_edge))
-    force = CustomNonbondedForce("""4*epsilon*(1/((alphaLJ + (r/sigma)^6)^2) - 1/(alphaLJ + (r/sigma)^6));
+    eta = (cutoff/unit.angstrom) / 3.0 # Note: eta*cutoff = 3, erfc(3) = 2.2e-5
+    force = CustomNonbondedForce(f"""4*epsilon*(1/((alphaLJ + (r/sigma)^6)^2) - 1/(alphaLJ + (r/sigma)^6)) + charge1*charge2*erfc(r*{eta})/(alphaLJ+r);
                                     sigma=0.5*(sigma1+sigma2);
                                     epsilon=sqrt(epsilon1*epsilon2);
                                     alphaLJ=0.0;""")
@@ -50,7 +51,8 @@ def mk_system(nparticles, mass, sigma, epsilon, box_edge):
         system.addForce(barostat)
     return system
 
-def run(system, integrator, positions):
+# Generator that yields successive sampled frames
+def run(system, integrator, positions, nequil_steps, nprod_steps):
     context = Context(system, integrator)
 
     # Initiate from last set of positions.
@@ -65,23 +67,14 @@ def run(system, integrator, positions):
     integrator.step(nequil_steps)
 
     # Sample.
-    position_history = [] # position_history[i] is the set of positions after iteration i
-    for iteration in range(nprod_iterations):
-        print("production iteration %d/%d" % (iteration+1, nprod_iterations))
-
+    while True:
         # Run dynamics.
         integrator.step(nprod_steps)
 
         # Get coordinates.
         state = context.getState(positions=True)
         positions = state.getPositions(asNumpy=True)
-
-        # Store positions.
-        position_history.append(positions)
-
-        #context.setPositions(fluid.positions)
-        #integrator.step(n_steps)
-        #print(context.positions)
+        yield positions
 
     # Clean up.
     del context, integrator
@@ -138,7 +131,7 @@ print("sigma = %s" % sigma)
 print("box_edge = %s" % box_edge)
 print("cutoff = %s" % cutoff)
 
-system = mk_system(nparticles, mass, sigma, epsilon, box_edge)
+system = mk_system(nparticles, mass, sigma, epsilon, box_edge, cutoff)
 
 # random initial positions
 import numpy.random
@@ -149,9 +142,12 @@ positions = unit.Quantity(
 
 integrator = LangevinIntegrator(temperature, collision_rate, timestep)
 
-history = run(system, integrator, positions)
-for x in history:
+history = []
+for x in run(system, integrator, positions, nequil_steps, nprod_steps):
     print(x[0])
+    history.append(x)
+    if len(history) >= nprod_iterations:
+        break
 
 en = compute_energies(system, history, temperature)
 print(en)
