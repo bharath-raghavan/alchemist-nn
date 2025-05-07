@@ -153,3 +153,17 @@ dynamics:
 Integrator is the flow coupling, it can be `lf` (LeapFrog) or `vv` (VelocityVerlet). I velocity verlet is not necessary, so we can remove it. The rest of the options are self explanatory. I also have a `network` option that sets the network parameters. Currently, only the EGNN is implemented, but I would like to eventually like to add other networks like Nequip. We might get better results.
 
 The last section is on the `training`, not much to be explained there.
+
+## Code Structure
+
+The following main modules:
+
+alchemist-nn:
+---> data: All dataset related classes
+      |
+      -------> Data: Custom class to hold a single data point (eg., MD frame). Holds `h`, `g`, `pos`, `vel`, `pbc()`, `edges()`
+      -------> BaseDataset: Inherits from pytorch database, and serves to read and accept `Data` objects.
+---> flow: The normalizing flow, integrator and loss
+---> nn: The different networks (currrently only EGCL implemented)
+---> utils: All helpes functions, esp. unit conversions
+
