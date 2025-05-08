@@ -158,12 +158,12 @@ The last section is on the `training`, not much to be explained there.
 
 The following main modules:
 
-alchemist-nn:
----> data: All dataset related classes
-      |
-      -------> Data: Custom class to hold a single data point (eg., MD frame). Holds `h`, `g`, `pos`, `vel`, `pbc()`, `edges()`
-      -------> BaseDataset: Inherits from pytorch database, and serves to read and accept `Data` objects.
----> flow: The normalizing flow, integrator and loss
----> nn: The different networks (currrently only EGCL implemented)
----> utils: All helpes functions, esp. unit conversions
+alchemist-nn:<br/>
+---> data: All dataset related classes<br/>
+&nbsp;&nbsp;&nbsp;&nbsp; ⊢----> Data: Custom class to hold a single data point (eg., MD frame). Holds `h`, `g`, `pos`, `vel`, `pbc()`, `edges()`<br/>
+&nbsp;&nbsp;&nbsp;&nbsp; ⊢----> BaseDataset: Inherits from pytorch database, and serves to read and accept `Data` objects. It requires a `process()` function to be implemented. This function should also call `append()` to append `Data` objects to `data_list`<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ⊢----> SimulatedDataset: Inherits from BaseDataset. Implements the `process()` function by running an OpenMM simulation, with the Langevin integrator. It also uses the `apped()` function to convert the positions and velocities as a list of `Data` objects. Requires `setup()` to be implemented in its children, expecting it to return an OpenMM `Simulation` object (containing the forcefield, topology and positions).  <br/>
+---> flow: The normalizing flow, integrator and loss<br/>
+---> nn: The different networks (currrently only EGCL implemented)<br/>
+---> utils: All helpes functions, esp. unit conversions<br/>
 
