@@ -8,7 +8,8 @@ _logger = logging.getLogger(__name__)
 import typer
 app = typer.Typer()
 
-from .config import load_config
+from .config import load_dict, DynamicSetup
+from .data.lj import LJDataset
 
 Model = Annotated[Path,
                 typer.Argument(help="NN Parameters for generation.")]
@@ -31,10 +32,14 @@ def generate(model: Model,
     pass
 
 @app.command()
-def dynamics(model: Model,
-             n: Annotated[int, typer.Argument(help="Number of atoms per structure.")],
+def dynamics(config: Annotated[Path, typer.Argument(help="DynamicSetup parameters.")],
              s: Annotated[int, typer.Argument(help="Number of structures to generate.")],
+             out: Annotated[Path, typer.Argument(help="Output file.")],
+             n: Annotated[int, typer.Argument(help="Number of atoms per structure.")],
              rho: Annotated[float, typer.Argument(help="Atomic density.")]):
-    """ Use a trained model to generate structures.
+    """ Run dynamics on a model to generate structures.
     """
-    pass
+
+    config = DynamicSetup.model_validate(**load_dict(config))
+    data = LJDataset(config, s, out)
+    data.process()

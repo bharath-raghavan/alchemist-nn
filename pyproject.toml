@@ -2,7 +2,7 @@
 name = "alchemist-nn"
 version = "0.2.0"
 description = ""
-authors = [{name="Bharath Raghavan", email="anonymous@author.com"},
+authors = [{name="Bharath Raghavan", email="bharath.rn@gmail.com"},
            {name="David M. Rogers", email="predictivestatmech@gmail.com"}]
 license = "BSD-3-Clause"
 readme = "README.md"
