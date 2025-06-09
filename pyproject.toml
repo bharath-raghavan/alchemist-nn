@@ -12,6 +12,7 @@ dependencies = [
   "typer",
   "tqdm",
   #"openff",
+  "ase>=3.22.0",
   "openmm",
   "numpy",
   "pyyaml",

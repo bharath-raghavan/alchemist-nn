@@ -1,4 +1,4 @@
-# AlchemistNN
+# Alchemist-NN
 
 A package for generating chemical structures
 using artificial neural networks.
@@ -11,7 +11,23 @@ or on slurm (will use DDP to run in parallel):
 
 srun python __main__.py config.yaml
 
-## YAML File
+## Dynamics
+
+To create a trajectory using molecular dynamics and the openmm
+package, use:
+
+    % alchemist dynamics example/lj.yaml 10 test.out
+
+This will arrange `natoms` Argon atoms in a box of constant volume (determined by the given density). Then run NVT MD for 10\*100 steps at 120K with the friction and dt as given. The `cutoff` is used while running the MD (it is a multiple of `sigma`). It will print out (both to `stdout` and the log file) the temperature and energy every 100 steps. Starting from the iteration specified in discard, it will write the trajectory to an ASE database.
+
+<!-- PDB file (specified in `traj`) and to `processed_file` (this will be used to load the dataset for training/generation). Here the `discard` is -1, so it will store only the last frame of the simulation. The `r_cut` is used to calculate the neighbor list during the NN training. -->
+
+
+## Train
+
+To train an NN model, use:
+
+    % alchemist train config.yaml
 
 Here is an example of a YAML file that will train on an MDDataset:
 
@@ -93,8 +109,6 @@ dataset:
   cutoff: 1
   r_cut: 3
 ```
-
-This will arrange 735 Argon atoms in a box of 20x20x20 (in the units specified). Then run NVT MD for 10000 at 300K with the friction and dt as given. The `cutoff` is used while running the MD (it is a multiple of `sigma`). It will print out (both to `stdout` and the log file) the temperature and energy every 100 steps. Starting from the iteration specified in discard, it will write the trajectory to a PDB file (specified in `traj`) and to `processed_file` (this will be used to load the dataset for training/generation). Here the `discard` is -1, so it will store only the last frame of the simulation. The `r_cut` is used to calculate the neighbor list during the NN training.
 
 Let us take a look at the `lig` dataset:
 

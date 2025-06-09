@@ -13,8 +13,11 @@ from openmm import (
     System,
     Vec3,
 )
+import numpy as np
 
-def mk_system(nparticles, mass, sigma, epsilon, box_edge, cutoff):
+from .config import DynamicConfig
+
+def mk_system(nparticles, mass, sigma, epsilon, box_edge, cutoff, pressure, temperature):
     system = System()
 
     system.setDefaultPeriodicBoxVectors(Vec3(box_edge, 0, 0),
@@ -52,8 +55,11 @@ def mk_system(nparticles, mass, sigma, epsilon, box_edge, cutoff):
     return system
 
 # Generator that yields successive sampled frames
-def run(system, integrator, positions, nequil_steps, nprod_steps):
+def run(system, integrator, positions, substeps):
     context = Context(system, integrator)
+    T = integrator.getTemperature()
+    #print(f"temp = {T}")
+    beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA * T)
 
     # Initiate from last set of positions.
     context.setPositions(positions)
@@ -63,18 +69,19 @@ def run(system, integrator, positions, nequil_steps, nprod_steps):
     LocalEnergyMinimizer.minimize(context)
 
     # Equilibrate.
-    print("equilibrating...")
-    integrator.step(nequil_steps)
+    #print("equilibrating...")
+    #integrator.step(nequil_steps)
 
     # Sample.
     while True:
         # Run dynamics.
-        integrator.step(nprod_steps)
+        integrator.step(substeps)
 
         # Get coordinates.
-        state = context.getState(positions=True)
+        state = context.getState(positions=True, energy=True)
         positions = state.getPositions(asNumpy=True)
-        yield positions
+        energy = beta * state.getPotentialEnergy()
+        yield positions/unit.angstrom, energy
 
     # Clean up.
     del context, integrator
@@ -99,55 +106,45 @@ def compute_energies(system, coords, temperature):
     del context, integrator
     return energies
 
-# Simulation settings
-#pressure = 80*unit.atmospheres
-pressure = None
-reduced_density = 0.85 # reduced density rho*sigma^3
+def simulate_system(config: DynamicConfig):
+    # Simulation settings
+    pressure = config.pressure*unit.bar if config.pressure else None
+    temperature = config.temperature*unit.kelvin
 
-temperature = 120*unit.kelvin
-collision_rate = 5/unit.picoseconds
-timestep = 2.5*unit.femtoseconds
+    nparticles = config.nparticles
 
-nparticles = 216
-nequil_steps = 100
-nprod_iterations = 10
-nprod_steps = 100
+    # Create a Lennard Jones test fluid mimicking Argon
+    mass = 39.9 * unit.amu
+    sigma = config.sigma * unit.angstrom
+    epsilon = 0.238 * unit.kilocalories_per_mole
+    charge = 0.0 * unit.elementary_charge
 
-# Create a Lennard Jones test fluid mimicking Argon
-mass = 39.9 * unit.amu
-sigma = 3.4*unit.angstrom
-epsilon = 0.238 * unit.kilocalories_per_mole
-charge = 0.0 * unit.elementary_charge
+    # =============================================================================
+    # Compute box size.
+    # =============================================================================
 
+    volume = nparticles*(sigma**3)/config.reduced_density
+    box_edge = volume**(1.0/3.0)
+    cutoff = min(box_edge*0.49, 2.5*sigma) # Compute cutoff
+    #print("sigma = %s" % sigma)
+    #print("box_edge = %s" % box_edge)
+    #print("cutoff = %s" % cutoff)
 
-# =============================================================================
-# Compute box size.
-# =============================================================================
+    system = mk_system(nparticles, mass, sigma, epsilon, box_edge, cutoff, pressure, temperature)
 
-volume = nparticles*(sigma**3)/reduced_density
-box_edge = volume**(1.0/3.0)
-cutoff = min(box_edge*0.49, 2.5*sigma) # Compute cutoff
-print("sigma = %s" % sigma)
-print("box_edge = %s" % box_edge)
-print("cutoff = %s" % cutoff)
+    # random initial positions
+    #positions = unit.Quantity(
+    #                np.random.uniform(high=box_edge/unit.angstrom,
+    #                size=[nparticles,3]), unit.angstrom) #sic
+    positions = np.random.uniform(high=box_edge/unit.angstrom,
+                                  size=[nparticles,3]) * unit.angstrom
 
-system = mk_system(nparticles, mass, sigma, epsilon, box_edge, cutoff)
+    integrator = LangevinIntegrator(
+                            temperature,
+                            config.collision_rate/unit.picoseconds,
+                            config.timestep*unit.femtoseconds)
 
-# random initial positions
-import numpy.random
-positions = unit.Quantity(
-                numpy.random.uniform(high=box_edge/unit.angstroms,
-                size=[nparticles,3]), unit.angstrom) #sic
+    yield from run(system, integrator, positions, config.substeps)
+    #en = compute_energies(system, history, temperature)
+    #print(en)
 
-
-integrator = LangevinIntegrator(temperature, collision_rate, timestep)
-
-history = []
-for x in run(system, integrator, positions, nequil_steps, nprod_steps):
-    print(x[0])
-    history.append(x)
-    if len(history) >= nprod_iterations:
-        break
-
-en = compute_energies(system, history, temperature)
-print(en)
