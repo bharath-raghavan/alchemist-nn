@@ -1,78 +1,64 @@
-from typing import List, Optional
-from pathlib import Path
-import json
-
+from typing import Dict Optional
 from pydantic import BaseModel
-import yaml
 
-class Units(BaseModel):
+class UnitsParams(BaseModel):
     time: str
     dist: str
 
-class TrajectoryData(BaseModel):
-    batch_size: int = 100
-    top_file: List[str]
-    traj_file: List[str]
-    processed_file: str
-    units: Units
+class UnittedParams(BaseModel):
+    units: UnitsParams
 
-class NetworkSetup(BaseModel):
-    hidden_nf: int
+class DatasetParams(UnittedParams):
+    type: str
+    batch_size: int = 1
+    params: Dict
 
-"""
-class DynamicSetup(BaseModel):
-    cls: str = "LJDataset"
-    r_cut: float
-    report_interval: int = 10
-    report_from: int = 100
-    temp: float = 300
-    traj_file: str
-    dt: float
-    integrator: str
+    @model_validator(mode='before')
+    def _dump_params(cls, values):
+        values['params'] = {}
+        for key in values:
+            if key not in ['type', 'batch_size', 'params']:
+                values['params'][key] = values[key]
+        return values
+
+class NetworkParams(BaseModel):
+    type: str = 'egcl'
     n_iter: int
-    #box_pad: float = 1
-    #network: NetworkSetup
-"""
 
-class DynamicConfig(BaseModel):
-    nparticles: int = 216
-    substeps: int = 100
+class FlowParams(UnittedParams):
+    type: str = 'lf'
+    dt: int = 1
+    r_cut: float = 3
+    box: List
+    network: NetworkParams
+    checkpoint: Optional[str] = None
 
-    reduced_density: float = 0.85 # reduced density rho*sigma^3
-    temperature: float = 120 # Kelvin
-    collision_rate: int = 5 # 1/ps
-    timestep: float = 2.5 # fs
-    sigma: float = 3.4 # angstrom
-    pressure: Optional[float] = None # bar | None
-
-class LossSetup(BaseModel):
-    temp: float = 298.15
+class LossParams(BaseModel):
+    temp: float # TODO: convert to LJ here only
     softening: float
 
-class TrainingSetup(BaseModel):
+class TrainingParams(BaseModel):
     num_epochs: int
     lr: float
-    scheduler: bool
-    loss: LossSetup
+    scheduler_type: Optional[str] = None
+    scheduler_params: Optional[Dict] = None
+    loss: LossParams
     log_interval: int
+    batch_size: int = 100
 
-#class ConfigFile(BaseModel):
-#    dynamics: DynamicSetup
-#    training: TrainingSetup
-#    dataset: TrajectoryData
+class ConfigFile(BaseModel):
+    flow: FlowParams
+    training:  Optional[TrainingParams] = None
+    dataset:  Optional[DatasetParams] = None
+    generate:  Optional[DatasetParams] = None
+    
+    @model_validator(mode='before')
+    def _check_whether_units_present(cls, values):
+        for key in values:
+            if key in ['flow', 'dataset', 'generate']:
+                if 'units' not in values[key]:
+                    values[key]['units'] = values['units']
+                if key == 'generate':
+                    values[key]['type'] = 'lj'
+        return values
 
-def load_dict(fname: Path) -> dict:
-    """ Read a dict from a yaml or json-formatted file.
-    """
-    with open(fname, "r", encoding="utf-8") as f:
-        if fname.suffix in [".yaml", ".yml"]:
-            data = yaml.safe_load(f)
-        else:
-            data = json.load(f)
-    return data
-
-#def load_config(fname: Path) -> ConfigFile:
-#    """ Read a ConfigFile from a yaml or json-formatted
-#    file.
-#    """
-#    return ConfigFile.model_validate(**load_dict(fname))

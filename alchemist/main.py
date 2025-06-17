@@ -1,6 +1,7 @@
 import os
 import sys
 import yaml
+import json
 import numpy as np
 from datetime import timedelta
 import time
@@ -32,7 +33,7 @@ def write_xyz(out, file):
                 
 class Main:
 
-    def __init__(self, world_size=None, world_rank=None, local_rank=None, num_cpus_per_task=None):
+    def __init__(self, input, world_size=None, world_rank=None, local_rank=None, num_cpus_per_task=None):
         if world_size and world_rank and local_rank:
             self.ddp = True
         else:
@@ -62,123 +63,65 @@ class Main:
             self.world_rank = 0
             self.local_rank = 'cpu'
     
-    def _setup_dataset(self, dataset_label, args):
-        dataset_type = args[dataset_label]['type']
-        dataset_class = getattr(importlib.import_module(f"alchemist.data.{dataset_type}"), f"{dataset_type.upper()}Dataset")
-        dataset_args = {i:args[dataset_label][i] for i in args[dataset_label] if (i!='batch_size' and i!='type')}
+        with open(fname, "r", encoding="utf-8") as f:
+            if fname.suffix in [".yaml", ".yml"]:
+                data = yaml.safe_load(f)
+            else:
+                data = json.load(f)
         
-        dataset_args['dist_unit'] = args['units']['dist']
-        dataset_args['time_unit'] = args['units']['time']
+        self.config_file = ConfigParams(**data)        
+    
+    def _setup_dataset(dataset_config):
+        dataset_args = dataset_config.params
+        dataset_type = dataset_config.type
+        dataset_class = getattr(importlib.import_module(f"alchemist.data.{dataset_type}"), f"{dataset_type.upper()}Dataset")
         
         T = [transforms.ConvertPositionsFrom(args['units']['dist']), transforms.Center()]
 
         if 'randomize_vel' in dataset_args and dataset_args['randomize_vel']:
-                T.append(transforms.RandomizeVelocity(kelvin_to_lj(float(dataset_args['temp']))))
-                dataset_args.pop('temp')
+            T.append(transforms.RandomizeVelocity(kelvin_to_lj(float(dataset_args['temp']))))
+            dataset_args.pop('temp')
         else:
             T.append(transforms.ConvertVelocitiesFrom(args['units']['dist'], args['units']['time']))
 
         return dataset_class(**dataset_args, transform=transforms.Compose(T))
-    
-    def setup(self, input):
-        self.start_epoch = 0
-        checkpoint = None
-    
-        with open(input, 'r') as f: args = yaml.load(f, Loader=yaml.FullLoader)
-        
-        self.mode = 'train'
-        if args['mode'] == 'generate': self.mode = 'gen'
-        elif args['mode'] == 'dataset': self.mode = 'data'
-        elif args['mode'] != 'train': eprint("error")
-        
-        if 'dynamics' in args and 'checkpoint_path' in args['dynamics']:
-             self.checkpoint_path = args['dynamics']['checkpoint_path']
-        else:
-            self.checkpoint_path = '' 
-        
-        if os.path.exists(self.checkpoint_path):
-            if self.world_rank == 0: print("Loading from saved state", flush=True)
-            checkpoint = torch.load(self.checkpoint_path, weights_only=False)
-            node_nf = checkpoint['node_nf']
-            self.hidden_nf = checkpoint['hidden_nf']
-            self.n_iter = checkpoint['n_iter']
-            dt = checkpoint['dt']
-            self.integrator = checkpoint['integrator']
-            lj_kBT = checkpoint['lj_kBT']
-            softening = checkpoint['softening']
-        elif self.mode != 'data':
-            self.hidden_nf = int(args['dynamics']['network']['hidden_nf'])
-            self.n_iter = int(args['dynamics']['n_iter'])
-            dt = time_to_lj(float(args['dynamics']['dt']), unit=args['units']['time'])
-            self.integrator = args['dynamics']['integrator'].lower()
-            lj_kBT = kelvin_to_lj(float(args['training']['loss']['temp']))
-            softening = float(args['training']['loss']['softening'])
-        
-        if self.mode == 'gen':
-            args['dataset']['node_nf'] = node_nf
-            args['dataset']['softening'] = softening
-            args['dataset']['temp'] = lj_to_kelvin(lj_kBT)
-            args['dataset']['box'] = [float(i) for i in args['dataset']['box']]
-            args['dataset']['n_atoms'] = int(args['dataset']['n_atoms'])
-            batch_size = 1
-        elif self.mode == 'train':
-            batch_size = int(args['training']['batch_size'])
-        
-        if args['dataset']['type'] == 'compose':
-            n_dataset = args['dataset']['number']
+            
+    def setup(self)
+        dataset_params = self.config_file.dataset.params
+            
+        if self.config_file.dataset.type == 'compose':
+            n_dataset = self.config_file.dataset.n_dataset
             datasets = []
-            for i in range(n_dataset):
-                datasets.append(self._setup_dataset(f'dataset{i+1}', args))
+            for i in dataset_args.keys():
+                datasets.append(self._setup_dataset(dataset_params[i]))
             from alchemist.data.base import ComposeDatasets
             self.dataset = ComposeDatasets(datasets)
         else:
-            self.dataset = self._setup_dataset('dataset', args)
-        
-        if self.mode == 'data':
-            return
-        
+            self.dataset = self._setup_dataset(dataset_params)
+            
         if self.ddp:
-            self.sampler = DistributedSampler(self.dataset, num_replicas=self.world_size, rank=self.world_rank, shuffle=True)
-            self.train_loader = DataLoader(self.dataset, batch_size=batch_size, num_workers=self.num_cpus_per_task, pin_memory=True, shuffle=False, sampler=self.sampler, drop_last=False)
+            self.sampler = DistributedSampler(self.dataset, num_replicas=self.world_size, rank=self.world_rank, shuffle=False)
+            self.train_loader = DataLoader(self.dataset, batch_size=self.config_file.training.batch_size, num_workers=self.num_cpus_per_task, pin_memory=True, shuffle=False, sampler=self.sampler, drop_last=False)
         else:
-            self.train_loader = DataLoader(self.dataset, batch_size=batch_size, shuffle=True)
-        
-        if not checkpoint:
-            node_nf = self.dataset.node_nf
-        
+            self.train_loader = DataLoader(self.dataset, batch_size=self.config_file.training.batch_size, shuffle=False)
+    
+        self.start_epoch = 0
         networks = []
         for i in range(self.n_iter): networks.append(EGCL(node_nf, node_nf, self.hidden_nf))
-        integrator_class = getattr(importlib.import_module(f"alchemist.flow.dynamics"), f"{self.integrator.upper()}Integrator")
-        self.model = integrator_class(network=network, n_iter=n_iter, dt=dt).to(self.local_rank)
-        
-        if checkpoint:
-            self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.start_epoch = checkpoint['epoch']+1
-            
-        if self.ddp: self.model = DDP(self.model, device_ids=[self.local_rank])
-        
-        if self.mode == 'gen':
-            if self.world_rank == 0: eprint("In generate mode", flush=True)
-            return    
-        
-        if self.world_rank == 0: eprint("In training mode", flush=True)
-        
-        if args['training']['scheduler']:
-            scheduler_step = float(args['training']['scheduler_step'])
-            gamma = float(args['training']['gamma'])
-        else:
-            scheduler_step = 0
-            gamma = 0
-        
-        self.log_interval = int(args['training']['log_interval'])
-        self.num_epochs = int(args['training']['num_epochs'])
-        
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(args['training']['lr']))
-        self.scheduler = None
+        integrator_class = getattr(importlib.import_module("alchemist.flow.dynamics"), f"{self.integrator.upper()}Integrator")
+        self.model = integrator_class(network=network, n_iter=self.config.flow.network.n_iter, dt=self.config.flow.dt).to(self.local_rank)
     
-        if args['training']['scheduler']:
-            scheduler_step = float(args['training']['scheduler_step'])
-            gamma = float(args['training']['gamma'])
+        if self.config.flow.checkpoint:
+            self.checkpoint_path = self.config.flow.checkpoint
+            checkpoint = torch.load(self.checkpoint_path, weights_only=False)
+        
+        if self.ddp: self.model = DDP(self.model, device_ids=[self.local_rank])
+    
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(self.config.training.lr))
+    
+        if self.config.training.scheduler_type:
+            scheduler_class = getattr(importlib.import_module("torch.optim"), self.config.training.scheduler_type)
+            self.scheduler = scheduler_class(self.optimizer, **self.config.training.scheduler_params)
         else:
             scheduler_step = 0
             gamma = 0
@@ -188,6 +131,8 @@ class Main:
         
         if self.world_rank == 0: eprint(f"Loss function parameters: softening={softening}, kBT={lj_kBT}", flush=True)
         self.nll = Alchemical_NLL(kBT=lj_kBT, softening=softening)
+    
+        self.nll = Alchemical_NLL(kBT=self.config.loss.temp, softening=self.config.loss.softening)
 
         if checkpoint:
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -235,14 +180,7 @@ class Main:
                 to_save = {
                        'epoch': epoch,
                        'model_state_dict': self.model.module.state_dict(),
-                       'optimizer_state_dict': self.optimizer.state_dict(),
-                       'node_nf': self.dataset.node_nf,
-                       'hidden_nf': self.hidden_nf,
-                       'softening': self.nll.softening,
-                       'lj_kBT': self.nll.kBT,
-                       'integrator': self.integrator,
-                       'n_iter': self.n_iter,
-                       'dt': self.model.module.dt
+                       'optimizer_state_dict': self.optimizer.state_dict()
                    }
                 if self.scheduler: to_save['scheduler_state_dict'] = self.scheduler.state_dict()
                 
@@ -276,12 +214,5 @@ class Main:
         print(torch.allclose(data_.pos, data.pos, atol=1e-8))
         print(torch.allclose(data_.h, data.h, atol=1e-8))
        
-    def __call__(self, input):
-        self.setup(input)
-        
-        if self.mode == 'train':
-            self.train()
-        elif self.mode == 'gen':
-            self.generate()
-        
+    def __del__(self):
         if self.ddp: dist.destroy_process_group()
