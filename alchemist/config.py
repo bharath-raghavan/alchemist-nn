@@ -60,5 +60,9 @@ class ConfigFile(BaseModel):
                     values[key]['units'] = values['units']
                 if key == 'generate':
                     values[key]['type'] = 'lj'
+                    if 'temp' not in values[key]:
+                        values[key]['temp'] = values['training']['loss']['temp']
+                    if 'softening' not in values[key]:
+                        values[key]['softening'] = values['training']['loss']['softening'] 
         return values
 
