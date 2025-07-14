@@ -25,7 +25,7 @@ class LargeMDDataset(BaseDataset):
                 
 class MDDataset(InMemoryBaseDataset):
 
-    def process(self, idx, **input_params):
+    def process(self, **input_params):
 
         for top, traj in zip(input_params['top_file'], input_params['traj_file']):
             u = MDAnalysis.Universe(top,  traj)

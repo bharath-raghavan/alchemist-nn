@@ -1,0 +1,33 @@
+[project]
+name = "alchemist-nn"
+version = "0.2.0"
+description = ""
+authors = [{name="Bharath Raghavan", email="bharath.rn@gmail.com"},
+           {name="David M. Rogers", email="predictivestatmech@gmail.com"}]
+license = "BSD-3-Clause"
+readme = "README.md"
+
+requires-python = ">=3.9,<4.0"
+dependencies = [
+  "typer",
+  "tqdm",
+  #"openff",
+  "ase>=3.22.0",
+  "openmm",
+  "numpy",
+  "pyyaml",
+  "pydantic",
+  "torch>=2.0",
+]
+
+[tool.poetry]
+packages = [
+    { include = "alchemist" }
+]
+
+[project.scripts]
+alchemist = "alchemist.alchemist:app"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

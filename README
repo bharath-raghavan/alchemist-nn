@@ -1,7 +1,0 @@
-Run by passing a YAML file:
-
-python train.yaml
-
-or on slurm (will use DDP to run in parallel):
-
-srun python train.yaml
