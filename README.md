@@ -3,17 +3,6 @@
 A package for generating chemical structures
 using artificial neural networks.
 
-Run by passing a YAML file:
-
-python __main__.py config.yaml
-
-or on slurm (will use DDP to run in parallel):
-
-srun python __main__.py config.yaml
-
-
-
-
 ## Train and Generate
 
 To train an NN model, use:
