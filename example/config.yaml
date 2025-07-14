@@ -1,0 +1,45 @@
+checkpoint: model.cpt
+mode: train
+units:
+  time: pico
+  dist: ang
+dataset:
+  type: trr
+  r_cut: 3
+  top_file: /lustre/orion/stf006/scratch/bharathrn/alchemist-nn_test/data/nacl/prep/topol.mpt
+  traj_file: [/lustre/orion/stf006/scratch/bharathrn/alchemist-nn_test/data/nacl/md/md_from_3270ps.trr]
+  box: [26, 26, 26]
+  atom_types: [Na, Cl]
+  prec: 64
+flow:
+  type: lf
+  dt: 1
+  network:
+    hidden_nf: 128
+    n_iter: 10
+training:
+  num_epochs: 5000
+  batch_size: 10
+  lr: 5e-3
+  scheduler_type: StepLR
+  scheduler_params:
+     step_size: 200
+     gamma: 0.99
+  loss:
+    temp: 298.15
+    softening: 0.1
+  log_interval: 1
+  accum_iter: 10
+generate:
+  type: lj
+  batch_size: 1
+  discard: -1
+  n_atoms: 300
+  n_iter: 10000
+  interval: 100
+  log: /lustre/orion/stf006/scratch/bharathrn/alchemist-nn_test/data/lj/log.txt
+  traj: /lustre/orion/stf006/scratch/bharathrn/alchemist-nn_test/data/lj/traj.pdb
+  friction: 1
+  dt: 0.004
+  cutoff: 1
+  r_cut: 3
