@@ -11,28 +11,31 @@ or on slurm (will use DDP to run in parallel):
 
 srun python __main__.py config.yaml
 
-## Dynamics
-
-To create a trajectory using molecular dynamics and the openmm
-package, use:
-
-    % alchemist dynamics example/lj.yaml 10 test.out
-
-This will arrange `natoms` Argon atoms in a box of constant volume (determined by the given density). Then run NVT MD for 10\*100 steps at 120K with the friction and dt as given. The `cutoff` is used while running the MD (it is a multiple of `sigma`). It will print out (both to `stdout` and the log file) the temperature and energy every 100 steps. Starting from the iteration specified in discard, it will write the trajectory to an ASE database.
-
-<!-- PDB file (specified in `traj`) and to `processed_file` (this will be used to load the dataset for training/generation). Here the `discard` is -1, so it will store only the last frame of the simulation. The `r_cut` is used to calculate the neighbor list during the NN training. -->
 
 
-## Train
+
+## Train and Generate
 
 To train an NN model, use:
 
-    % alchemist train config.yaml
+    % alchemist train example/config.yaml
+
+To generate molecules with a model trained on that dataset, run:
+
+	% alchemist generate example/config.yaml
+
+## Dynamics
+
+To create a trajectory using molecular dynamics and the openmm package, use:
+
+    % alchemist createdb example/lj.yaml
+
+## Input File Cookbook
 
 Here is an example of a YAML file that will train on an MDDataset:
 
 ```
-mode: train
+checkpoint: model.cpt
 units:
   time: pico
   dist: ang
@@ -43,12 +46,11 @@ dataset:
   traj_file: [data/acetone/raw/acetone.trr]
   processed_file: data/acetone/processed.pt
 dynamics:
-  integrator: lf
-  n_iter: 5
+  flow: lf
   dt: 1
-  checkpoint_path: model.cpt
   network:
     hidden_nf: 128
+	n_iter: 5
 training:
   num_epochs: 5000
   batch_size: 5
@@ -152,19 +154,19 @@ dataset3:
 
 Each dataset could have their own options to process them as described above, or you can just pass the processed file.
 
-The `dynamics` section sets the flow:
+The `flow` section sets the flow:
 
 ```
-dynamics:
-  integrator: lf
-  n_iter: 5
+flow:
+  type: lf
   dt: 1
   checkpoint_path: model.cpt
   network:
     hidden_nf: 128
+	n_iter: 5
 ```
 
-Integrator is the flow coupling, it can be `lf` (LeapFrog) or `vv` (VelocityVerlet). I velocity verlet is not necessary, so we can remove it. The rest of the options are self explanatory. I also have a `network` option that sets the network parameters. Currently, only the EGNN is implemented, but I would like to eventually like to add other networks like Nequip. We might get better results.
+Integrator is the flow coupling, it can be `lf` (LeapFrog) or `vv` (VelocityVerlet). I know velocity verlet is not necessary, so we can remove it. The rest of the options are self explanatory. I also have a `network` option that sets the network parameters. Currently, only the EGNN is implemented, but I would like to eventually like to add other networks like Nequip. We might get better results.
 
 The last section is on the `training`, not much to be explained there.
 

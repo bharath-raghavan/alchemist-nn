@@ -13,10 +13,10 @@ import openmm.app as app
 import openmm.unit as unit
 
 class SimulatedDatasetReporter:
-    def __init__(self, node_nf_input, r_cut, transform, report_interval, report_from, desc, dist_units, time_units, traj, temp):
+    def __init__(self, random_h, r_cut, transform, report_interval, report_from, desc, dist_units, time_units, traj, temp, atom_types):
         self.data_list = []
         self.transform = transform
-        self.node_nf_input = node_nf_input
+        self.random_h = random_h
         self.r_cut = r_cut
         self.box_pad = 0
         self.report_interval = report_interval
@@ -25,7 +25,7 @@ class SimulatedDatasetReporter:
         self.dist_units = dist_units
         self.time_units = time_units
         self.traj = traj
-        self.kBT = kelvin_to_lj(temp)
+        self.atom_types = atom_types
 
     def describeNextReport(self, simulation):
         steps = self.report_interval - simulation.currentStep%self.report_interval
@@ -54,12 +54,14 @@ class SimulatedDatasetReporter:
             
         z = [a.element.symbol for a in simulation.topology.atoms()]
         
-        if self.node_nf_input:
-            h = torch.normal(0, 1/math.sqrt(self.kBT), size=(N, self.node_nf_input), dtype=torch.float64)
-            g = torch.normal(0, 1/math.sqrt(self.kBT), size=(N, self.node_nf_input), dtype=torch.float64)
+        if self.random_h:
+            h = torch.normal(0, 1, size=(N, len(self.atom_types)), dtype=torch.float64)
         else:
-            h = None
-            g = None
+            atom_types = {z:i for i,z in enumerate(self.atom_types)}
+            type_idx = [atom_types[i] for i in z]
+            h = one_hot(torch.tensor(type_idx), num_classes=len(atom_types), dtype=self.prec)
+        
+        g = torch.normal(0, 1, size=h.shape, dtype=torch.float64)
         
         data = Data(
             z=z,
@@ -105,7 +107,8 @@ class SimulatedDataset(InMemoryBaseDataset, ABC):
             time_units = unit.femtoseconds
             scale = 1e-3
         
-        self.random_h = False
+        
+        self.random_h = False # should I tell SimulatedDatasetReporter to randomize h, this is set to true only in LJ Dataset
         
         self.integrator = mm.LangevinMiddleIntegrator(temp*unit.kelvin, friction/(scale*unit.picosecond), dt*scale*unit.picoseconds)
         simulation, desc = self.setup(**input_params)
@@ -115,13 +118,13 @@ class SimulatedDataset(InMemoryBaseDataset, ABC):
         
         simulation.context.setVelocitiesToTemperature(temp*unit.kelvin)
         
-        if self.random_h: # set by LJ dataset
-            node_nf_input = input_params['node_nf']
+        if 'atom_types' in input_params:
+            atom_types = input_params['atom_types']
         else:
-            node_nf_input = None
+            atoms_types = ['X'] * int(input_params['natom_types'])
         
         # Add reporters to get data and output traj
-        rep = SimulatedDatasetReporter(node_nf_input, self.r_cut, self.transform, report_interval, report_from, desc, self.dist_units, time_units, traj, temp)
+        rep = SimulatedDatasetReporter(self.random_h, self.r_cut, self.transform, report_interval, report_from, desc, self.dist_units, time_units, traj, temp, atoms_types)
         simulation.reporters.append(rep)
         
         # Add reporters to output log

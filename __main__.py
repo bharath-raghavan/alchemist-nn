@@ -12,6 +12,9 @@ import numpy as np
 import typer
 app = typer.Typer()
 
+import yaml
+import json
+
 from alchemist.runWrapper import RunWrapper
 from alchemist.config import ConfigFile
 
@@ -36,10 +39,16 @@ def generate(config: Annotated[Path, typer.Argument(help="Training parameter yam
     hndl.generate()
 
 @app.command()
-def dumpdb(config: Annotated[Path, typer.Argument(help="Training parameter yaml file.")]):
-    """ Run dynamics on a model to generate structures.
+def createdb(config: Annotated[Path, typer.Argument(help="Training parameter yaml file.")]):
+    """ Process data and create a database. Can be used to run dynamics to generate structures.
     """
-    cofig_hdnl = ConfigFile.fromFile(config)
-    cofig_hdnl.dataset.get()
+    with open(config, "r", encoding="utf-8") as f:
+        if config.suffix in [".yaml", ".yml"]:
+            data = yaml.safe_load(f)
+        else:
+            data = json.load(f)
+    
+    cofig_hdnl = ConfigFile(dataset=data)
+    ds = cofig_hdnl.dataset.get()
     
 app()

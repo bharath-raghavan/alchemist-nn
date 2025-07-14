@@ -1,9 +1,0 @@
-nparticles: 216
-substeps: 100
-
-reduced_density: 0.85 # reduced density rho*sigma^3
-temperature: 120 # Kelvin
-collision_rate: 5 # 1/ps
-timestep: 2.5 # fs
-sigma: 3.4 # angstrom
-pressure: null

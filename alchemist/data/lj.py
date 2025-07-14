@@ -86,4 +86,6 @@ class LJDataset(SimulatedDataset):
         simulation = app.Simulation(topology, system, self.integrator)
         simulation.context.setPositions(positions)
         
+        self.random_h = True
+        
         return simulation, "LJ"

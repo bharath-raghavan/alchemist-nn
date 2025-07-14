@@ -86,7 +86,7 @@ class TrainingParams(BaseModel):
 
 class ConfigFile(BaseModel):
     checkpoint: Optional[str] = None
-    flow: FlowParams
+    flow: Optional[FlowParams] = None
     training:  Optional[TrainingParams] = None
     dataset:  Optional[DatasetParams] = None
     generate:  Optional[DatasetParams] = None

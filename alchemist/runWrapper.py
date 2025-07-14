@@ -102,20 +102,19 @@ class RunWrapper:
             self.start_epoch = 0
             self.num_epochs = self.start_epoch+config.training.num_epochs
             self.log_interval = config.training.log_interval
-            self.accum_iter = config.training.accum_iter
         else:
             self.atom_types_list = config.generate.params.atom_types
     
-    def _backprop(self, data, batch_idx):
+    def _train_backprop(self, data, accum_iter, batch_idx):
         # passes and weights update
         with torch.set_grad_enabled(True):
             out, ldj = self.model(data)
             loss = self.nll(out, ldj)
-            loss = loss/self.accum_iter
+            loss = loss/accum_iter
             loss.backward()
 
             # weights update
-            if ((batch_idx + 1) % self.accum_iter == 0) or (batch_idx + 1 == len(self.train_loader)):
+            if ((batch_idx + 1) % accum_iter == 0) or (batch_idx + 1 == len(self.train_loader)):
                 self.optimizer.step()
                 if self.scheduler: self.scheduler.step()
                 self.optimizer.zero_grad()
@@ -143,7 +142,7 @@ class RunWrapper:
                     eprint('GPU \tTraining Loss\t Learning Rate', flush=True)
 
                 data = data.to(self.local_rank)
-                loss = self._backprop(data, i)
+                loss = self._train_backprop(data, 10, i)
                 losses += loss
 
                 eprint('%.5i \t    %.2f' % (self.world_rank, loss), flush=True)
@@ -189,7 +188,7 @@ class RunWrapper:
         write_xyz(out, elems, 'test_out.xyz')
 
         data_, _ = self.model(out)
-
+        print(data)
         print(torch.allclose(data_.pos, data.pos, atol=1e-8))
         print(torch.allclose(data_.h, data.h, atol=1e-8))
        
