@@ -1,13 +1,12 @@
 from typing import Dict, Optional, List
 from pydantic import BaseModel, model_validator
-import importlib
-import yaml
-import json
-from .data import transforms
-from .nn.egcl import EGCL
-from .nn.argmax import ArgMax
-from .utils.conversion import kelvin_to_lj, time_to_lj
-from .flow.loss import Alchemical_NLL
+import importlib, yaml, json
+import torch
+from ..data import transforms
+from ..nn.argmax import ArgMax
+from ..utils.conversion import kelvin_to_lj, time_to_lj, dist_to_lj
+from ..nn.loss import Alchemical_NLL
+from ..nn.flow import LFFlow
 
 class UnitsParams(BaseModel):
     time: str
@@ -47,25 +46,71 @@ class DatasetParams(UnittedParams):
         
         return dataset_class(**dataset_args, transform=transforms.Compose(T))
 
-class NetworkParams(BaseModel):
-    type: str = 'egcl'
-    n_iter: int
-    hidden_nf: int
+class EnergyModelParams(BaseModel):
+    ## ViSNet
+    lmax: Optional[int] = None
+    vecnorm_type: Optional[str] = None
+    trainable_vecnorm: Optional[bool] = None
+    num_heads: Optional[int] = None
+    num_layers: Optional[int] = None
+    hidden_channels: Optional[int] = None
+    num_rbf: Optional[int] = None
+    trainable_rbf: Optional[bool] = None
+    vertex: Optional[bool] = None
+    atomref: Optional[List] = None
+    reduce_op: Optional[str] = None
+    cutoff: Optional[float] = None
+    mean: Optional[float] = None
+    std: Optional[float] = None
+    ##
     
-    def get(self, node_nf):
-        networks = []
-        for i in range(self.n_iter): networks.append(EGCL(node_nf, node_nf, self.hidden_nf))
-        return networks
-
+    ## EGCL
+    hidden_nf: Optional[int] = None
+    act_fn: Optional[str] = None
+    coords_weight: Optional[int] = None
+    attention : Optional[bool] = None
+    clamp: Optional[bool] = None
+    norm_diff : Optional[bool] = None
+    tanh : Optional[bool] = None
+    ##
+        
+    def get(self):
+        ret = self.dict()
+        ret_keys = list(ret.keys())
+        for i in ret_keys:
+            if ret[i] is None:
+                ret.pop(i)
+        return ret
+        
 class FlowParams(UnittedParams):
-    type: str = 'lf'
     dt: float = 1
-    network: NetworkParams
-    checkpoint: Optional[str] = None
+    n_iter: int
+    node_nf: Optional[int] = None
+    energy_model: str
+    node_hidden_layers: int
+    energy_model_params: EnergyModelParams
     
+    @model_validator(mode='before')
+    def _check_whether_units_present(cls, values):
+        for key in values:
+            if key == 'energy_model_params':
+                if 'units' not in values[key]:
+                    values[key]['units'] = values['units']
+        return values
+    
+    @model_validator(mode='after')
+    def _convert(self):
+        if self.energy_model_params.cutoff != None:
+            self.energy_model_params.cutoff = dist_to_lj(self.energy_model_params.cutoff, unit=self.units.dist)
+        if self.energy_model_params.atomref != None :
+            self.energy_model_params.atomref = torch.tensor(self.energy_model_params.atomref)
+        return self
+            
     def get(self, node_nf):
-        integrator_class = getattr(importlib.import_module("alchemist.flow.dynamics"), f"{self.type.upper()}Integrator")
-        return integrator_class(self.network.get(node_nf), ArgMax(node_nf, self.network.hidden_nf), time_to_lj(self.dt, unit=self.units.time))
+        if self.node_nf is None:
+            self.node_nf = node_nf
+        p = self.energy_model_params.get()
+        return LFFlow(self.n_iter,  ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.node_nf, self.node_hidden_layers, self.energy_model)
 
 class LossParams(BaseModel):
     temp: float
@@ -84,7 +129,7 @@ class TrainingParams(BaseModel):
     batch_size: int = 100
     accum_iter: int = 0
 
-class ConfigFile(BaseModel):
+class ConfigParams(BaseModel):
     checkpoint: Optional[str] = None
     flow: Optional[FlowParams] = None
     training:  Optional[TrainingParams] = None
@@ -99,7 +144,7 @@ class ConfigFile(BaseModel):
             else:
                 data = json.load(f)
     
-        return ConfigFile(**data)
+        return ConfigParams(**data)
             
     @model_validator(mode='before')
     def _check_whether_units_present(cls, values):

@@ -2,14 +2,11 @@ import torch
 from torch import nn
 from ..utils.helpers import one_hot, log_gaussian
 import torch.nn.functional as F
+from .node import NodeModel
 
-class ArgMax(torch.nn.Module):
+class ArgMax(NodeModel):
     def __init__(self, node_nf, hidden_nf, act_fn=nn.SiLU()):
-        super().__init__()
-        self.network = nn.Sequential(
-            nn.Linear(node_nf, hidden_nf),
-            act_fn,
-            nn.Linear(hidden_nf, node_nf*2))
+        super().__init__(node_nf, node_nf*2, hidden_nf, act_fn)
         
     def forward(self, h):
         net_out = self.network(h)

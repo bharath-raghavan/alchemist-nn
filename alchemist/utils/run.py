@@ -7,11 +7,11 @@ import importlib
 
 import torch
 
-from .data.sdf import SDFDataset
-from .data.base import DataLoader
-from .data import transforms
-from .utils.conversion import dist_to_lj, kelvin_to_lj, time_to_lj, lj_to_dist, lj_to_kelvin
-from .utils.constants import sigma
+from ..data.sdf import SDFDataset
+from ..data.base import DataLoader
+from ..data import transforms
+from .conversion import dist_to_lj, kelvin_to_lj, time_to_lj, lj_to_dist, lj_to_kelvin
+from .constants import sigma
 
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
@@ -27,7 +27,7 @@ def write_xyz(out, elems, file):
             x = x*sigma*1e10
             f.write("%s %.18g %.18g %.18g\n" % (a, x[0].item(), x[1].item(), x[2].item()))
                 
-class RunWrapper:
+class Runner:
 
     def __init__(self, world_size=None, world_rank=None, local_rank=None, num_cpus_per_task=None):
         if world_size and world_rank and local_rank:
