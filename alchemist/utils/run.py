@@ -102,6 +102,7 @@ class Runner:
             self.start_epoch = 0
             self.num_epochs = self.start_epoch+config.training.num_epochs
             self.log_interval = config.training.log_interval
+            self.accum_iter = config.training.accum_iter
         else:
             self.atom_types_list = config.generate.params.atom_types
     
@@ -142,7 +143,7 @@ class Runner:
                     eprint('GPU \tTraining Loss\t Learning Rate', flush=True)
 
                 data = data.to(self.local_rank)
-                loss = self._train_backprop(data, 10, i)
+                loss = self._train_backprop(data, self.accum_iter, i)
                 losses += loss
 
                 eprint('%.5i \t    %.2f' % (self.world_rank, loss), flush=True)

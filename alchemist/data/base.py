@@ -73,6 +73,7 @@ class Data:
             return mol
     
     def clone(self):
+        z = self.z.clone()
         h = self.h.clone()
         g = self.g.clone()
         pos = self.pos.clone()
@@ -82,7 +83,7 @@ class Data:
         box = self.box.clone()
         
         return Data(
-                z=self.z,
+                z=z,
                 h=h,
                 g=g,
                 pos=pos,
@@ -95,6 +96,7 @@ class Data:
             )
             
     def to(self, device):
+        z = self.z.to(device)
         h = self.h.to(device)
         g = self.g.to(device)
         pos = self.pos.to(device)
@@ -104,7 +106,7 @@ class Data:
         box = self.box.to(device)
         
         return Data(
-                z=self.z,
+                z=z,
                 h=h,
                 g=g,
                 pos=pos,
@@ -162,7 +164,7 @@ class DataLoader(torch.utils.data.DataLoader):
     def collater(self, dataset):
         
         return Data(
-                z=[d.z for d in dataset],
+                z=torch.cat([d.z for d in dataset]),
                 h=torch.cat([d.h for d in dataset]),
                 g=torch.cat([d.g for d in dataset]),
                 pos=torch.cat([d.pos for d in dataset]),
@@ -225,7 +227,7 @@ class BaseDataset(torch.utils.data.Dataset, ABC):
         N = pos.shape[0]
 
         data = Data(
-            z=z,
+            z=torch.tensor(type_idx),
             h=h,
             g=torch.normal(0, 1, size=h.shape, dtype=torch.float64),
             pos=pos,

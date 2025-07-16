@@ -62,6 +62,7 @@ class EnergyModelParams(BaseModel):
     cutoff: Optional[float] = None
     mean: Optional[float] = None
     std: Optional[float] = None
+    add_self_loops: Optional[bool] = None
     ##
     
     ## EGCL
@@ -89,6 +90,7 @@ class FlowParams(UnittedParams):
     energy_model: str
     node_hidden_layers: int
     energy_model_params: EnergyModelParams
+    box: List
     
     @model_validator(mode='before')
     def _check_whether_units_present(cls, values):
@@ -104,13 +106,13 @@ class FlowParams(UnittedParams):
             self.energy_model_params.cutoff = dist_to_lj(self.energy_model_params.cutoff, unit=self.units.dist)
         if self.energy_model_params.atomref != None :
             self.energy_model_params.atomref = torch.tensor(self.energy_model_params.atomref)
+        self.box = torch.tensor([dist_to_lj(float(i), unit=self.units.dist) for i in self.box])
         return self
             
     def get(self, node_nf):
         if self.node_nf is None:
             self.node_nf = node_nf
-        p = self.energy_model_params.get()
-        return LFFlow(self.n_iter,  ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.node_nf, self.node_hidden_layers, self.energy_model)
+        return LFFlow(self.n_iter,  ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.node_nf, self.node_hidden_layers, self.energy_model, self.box, **self.energy_model_params.get())
 
 class LossParams(BaseModel):
     temp: float
