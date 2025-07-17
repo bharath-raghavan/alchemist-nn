@@ -1,7 +1,6 @@
 from typing import Dict, Optional, List
 from pydantic import BaseModel, model_validator
 import importlib, yaml, json
-import torch
 from ..data import transforms
 from ..nn.argmax import ArgMax
 from ..utils.conversion import kelvin_to_lj, time_to_lj, dist_to_lj
@@ -106,8 +105,8 @@ class FlowParams(UnittedParams):
         if self.energy_model_params.cutoff != None:
             self.energy_model_params.cutoff = dist_to_lj(self.energy_model_params.cutoff, unit=self.units.dist)
         if self.energy_model_params.atomref != None :
-            self.energy_model_params.atomref = torch.tensor(self.energy_model_params.atomref)
-        self.box = torch.tensor([dist_to_lj(float(i), unit=self.units.dist) for i in self.box])
+            self.energy_model_params.atomref = list(self.energy_model_params.atomref)
+        self.box = [dist_to_lj(float(i), unit=self.units.dist) for i in self.box]
         return self
             
     def get(self, node_nf):

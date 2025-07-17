@@ -10,7 +10,7 @@ class LFFlow(torch.nn.Module):
         self.energy_networks = []
         self.node_networks = []
         self.node_force_networks = []
-        self.box = box
+        self.box = torch.tensor(box) 
         
         for i in range(n_iter):
             energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{energy_model}"), f"{energy_model.upper()}")

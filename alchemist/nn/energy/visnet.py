@@ -49,12 +49,14 @@ class VISNET(visnet.ViSNet):
            cutoff: float = 5.0,
            max_num_neighbors: int = 32,
            vertex: bool = False,
-           atomref: Optional[Tensor] = None,
+           atomref: Optional[List] = None,
            reduce_op: str = "sum",
            mean: float = 0.0,
            std: float = 1.0,
            add_self_loops: bool = True
        ) -> None:
+       
+       atomref = torch.tensor(atomref)
        
        super().__init__(lmax,
         vecnorm_type,
