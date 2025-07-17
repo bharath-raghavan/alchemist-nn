@@ -111,6 +111,10 @@ class Runner:
         with torch.set_grad_enabled(True):
             out, ldj = self.model(data)
             loss = self.nll(out, ldj)
+            
+            if torch.isnan(loss):
+                raise ValueError("Loss has become NaN")
+            
             loss = loss/accum_iter
             loss.backward()
 
