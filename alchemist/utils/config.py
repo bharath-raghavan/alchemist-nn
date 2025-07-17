@@ -91,6 +91,7 @@ class FlowParams(UnittedParams):
     node_hidden_layers: int
     energy_model_params: EnergyModelParams
     box: List
+    prec: int
     
     @model_validator(mode='before')
     def _check_whether_units_present(cls, values):
@@ -112,7 +113,7 @@ class FlowParams(UnittedParams):
     def get(self, node_nf):
         if self.node_nf is None:
             self.node_nf = node_nf
-        return LFFlow(self.n_iter,  ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.node_nf, self.node_hidden_layers, self.energy_model, self.box, **self.energy_model_params.get())
+        return LFFlow(self.n_iter,  ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.node_nf, self.node_hidden_layers, self.energy_model, self.box, self.prec, **self.energy_model_params.get())
 
 class LossParams(BaseModel):
     temp: float
@@ -133,6 +134,7 @@ class TrainingParams(BaseModel):
 
 class ConfigParams(BaseModel):
     checkpoint: Optional[str] = None
+    prec: Optional[int] = 64
     flow: Optional[FlowParams] = None
     training:  Optional[TrainingParams] = None
     dataset:  Optional[DatasetParams] = None
@@ -152,6 +154,7 @@ class ConfigParams(BaseModel):
     def _check_whether_units_present(cls, values):
         for key in values:
             if key in ['flow', 'dataset', 'generate']:
+                values[key]['prec'] = values['prec']
                 if 'units' not in values[key]:
                     values[key]['units'] = values['units']
                 if key == 'generate':
@@ -162,7 +165,7 @@ class ConfigParams(BaseModel):
                     if 'softening' not in values[key]:
                         values[key]['softening'] = values['training']['loss']['softening'] 
                     if 'box' not in values[key]:
-                        values[key]['box'] = values['dataset']['box'] 
+                        values[key]['box'] = values['flow']['box'] 
                     if 'atom_types' not in values[key]:
                         values[key]['atom_types'] = values['dataset']['atom_types'] 
         return values

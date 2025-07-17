@@ -29,8 +29,6 @@ class ConvertPositionsFrom:
 
     def __call__(self, data):
         data.pos = dist_to_lj(data.pos, self.input_unit)
-        data.box = dist_to_lj(data.box, self.input_unit)
-        data.r_cut = dist_to_lj(data.r_cut, self.input_unit)
         return data
         
 class ConvertVelocitiesFrom:

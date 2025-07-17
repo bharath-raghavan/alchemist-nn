@@ -9,7 +9,7 @@ class EGCL(nn.Module):
     """
 
 
-    def __init__(self, h_dim, hidden_nf, act_fn='silu', coords_weight=1.0, attention=False, clamp=False, norm_diff=False, tanh=False):
+    def __init__(self, h_dim, box, hidden_nf, act_fn='silu', coords_weight=1.0, attention=False, clamp=False, norm_diff=False, tanh=False, max_num_neighbors=32, add_self_loops=False):
         super().__init__()
         input_nf = h_dim
         output_nf = h_dim
@@ -49,6 +49,8 @@ class EGCL(nn.Module):
                 nn.Sigmoid())
             
         self.norm_diff = norm_diff
+        
+        self.distance = PeriodicDistance(cutoff, box, max_num_neighbors=max_num_neighbors, add_self_loops=add_self_loops)
 
     def edge_model(self, source, target, radial):
         out = torch.cat([source, target, radial], dim=1)
@@ -65,7 +67,7 @@ class EGCL(nn.Module):
         return agg*self.coords_weight
     
     def forward(self, data):
-        coord_diff = data.edges.coord_diff
+        edge_index, coord_diff = self.distance(data.pos, data.batch)
         
         radial = torch.sum((coord_diff)**2, 1).unsqueeze(1)
 
@@ -73,24 +75,10 @@ class EGCL(nn.Module):
             norm = torch.sqrt(radial) + 1
             coord_diff = coord_diff/(norm)
         
-        row = data.edges.row
-        col = data.edges.col
+        row = edge_index[0]
+        col = edge_index[1]
             
         edge_attr = self.edge_model(data.h[row], data.h[col], radial)
-        
-        ener = self.energy_model(coord_diff, row, edge_attr, data.h.size(0))
-        
-        ## calculate derivate
-        
-        grad_outputs = [torch.ones_like(ener)]
-        dener = grad(
-            [ener],
-            [data.pos],
-            grad_outputs=grad_outputs,
-            create_graph=True,
-            retain_graph=True,
-        )[0]
-        if dener is None:
-            raise RuntimeError("Autograd returned None for the force prediction.")
-        return ener, -dener
+
+        return self.energy_model(coord_diff, row, edge_attr, data.h.size(0))
             

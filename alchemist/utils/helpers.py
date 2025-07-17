@@ -12,24 +12,6 @@ def get_box_len(pos):
     max_ = torch.max(pos, dim=0)[0]
     return (max_-min_).round()
 
-def get_periodic_images_within(pos, box, r_cut, batch):
-    # find all 27 periodic images of positions
-    pos_all_periodic_images = torch.cat([pos+torch.tensor([a,b,c], dtype=pos.dtype, device=pos.device) for c in [-box[2],box[2],0] for b in [-box[1],box[1],0] for a in [-box[0],box[0],0]])
-    batch = batch.repeat(27)
-    
-    # find positions within box and r_cut
-    ellipse_radii = box+r_cut
-    scaled_points = pos_all_periodic_images/ellipse_radii
-    ids_in_ellipse = torch.sum(scaled_points**2, axis=1) <= 1
-    pos_all_periodic_images = pos_all_periodic_images[ids_in_ellipse]
-    batch = batch[ids_in_ellipse]
-    
-    # and get corresponding id mapping from pos to pos_all_periodic_images
-    id_mapping = torch.tensor(list(range(0, pos.shape[0])), device=pos.device).repeat(27)
-    id_mapping = id_mapping[ids_in_ellipse]
-    
-    return pos_all_periodic_images, id_mapping, batch
-    
 def get_element(elem, mass):
     if elem == '':
         mass_int = int(round(mass))
