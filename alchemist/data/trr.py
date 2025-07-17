@@ -29,7 +29,7 @@ class TRRDataset(BaseDataset):
 
         return (
             z,
-            torch.tensor(sele.positions*dist_scale, dtype=torch.float64),
-            torch.tensor(sele.velocities*dist_scale/time_scale, dtype=torch.float64),
+            torch.tensor(sele.positions*dist_scale, dtype=self.dtype),
+            torch.tensor(sele.velocities*dist_scale/time_scale, dtype=self.dtype),
             'Frame: ' + str(idx)
         )
