@@ -1,30 +1,24 @@
 import importlib
 import torch
-from .node import NodeModel, NodeEdgeModel
 from torch.autograd import grad
 from ..utils.helpers import apply_pbc
 
 class LFFlow(torch.nn.Module):
-    def __init__(self, n_iter, dequant_network, dt, h_dim, node_hidden_layers, energy_model, box, prec, **params):
+    def __init__(self, energy_networks, node_networks, node_force_networks, dequant_network, dt, box, prec):
         super().__init__()
         self.energy_networks = []
         self.node_networks = []
         self.node_force_networks = []
-        self.box = torch.tensor(box) 
+        self.register_buffer('box', torch.tensor(box))
+        self.register_buffer('dt', torch.tensor(dt))
+        self.register_buffer('dt_2', torch.tensor(0.5*dt))
         
-        for i in range(n_iter):
-            energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{energy_model}"), f"{energy_model.upper()}")
-            self.energy_networks.append(energy_model_class(h_dim, box, **params))
-            self.node_networks.append(NodeModel(h_dim, 1, node_hidden_layers))
-            self.node_force_networks.append(NodeModel(h_dim, h_dim, node_hidden_layers))
-        
-        self.energy_networks = torch.nn.ModuleList(self.energy_networks) 
-        self.node_networks = torch.nn.ModuleList(self.node_networks)
-        self.node_force_networks = torch.nn.ModuleList(self.node_force_networks)
+        self.energy_networks = torch.nn.ModuleList(energy_networks) 
+        self.node_networks = torch.nn.ModuleList(node_networks)
+        self.node_force_networks = torch.nn.ModuleList(node_force_networks)
         
         self.dequantize = dequant_network
-        self.dt = dt
-        self.dt_2 = 0.5*dt
+
         if prec == 64:
             self.to(torch.double)
         else:

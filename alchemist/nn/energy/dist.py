@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 import torch
 from torch import Tensor
 from torch_geometric.nn import radius_graph
@@ -25,13 +25,13 @@ class PeriodicDistance(torch.nn.Module):
     def __init__(
         self,
         cutoff: float,
-        box: Tensor,
+        box: List,
         max_num_neighbors: int = 32,
         add_self_loops: bool = True,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
-        self.box = box
+        self.register_buffer('box', torch.tensor(box))
         self.max_num_neighbors = max_num_neighbors
         self.add_self_loops = add_self_loops
         

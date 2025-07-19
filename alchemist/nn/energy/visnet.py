@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import torch
 from torch import Tensor
 from torch.autograd import grad
@@ -12,7 +12,9 @@ from .dist import PeriodicDistance
 class ViSNetBlock(visnet.ViSNetBlock):
     def __init__(
         self,
-        box: Tensor,
+        box: List,
+        max_z: int,
+        cutoff: float,
         lmax: int = 1,
         vecnorm_type: Optional[str] = None,
         trainable_vecnorm: bool = False,
@@ -21,8 +23,6 @@ class ViSNetBlock(visnet.ViSNetBlock):
         hidden_channels: int = 128,
         num_rbf: int = 32,
         trainable_rbf: bool = False,
-        max_z: int = 100,
-        cutoff: float = 5.0,
         max_num_neighbors: int = 32,
         vertex: bool = False,
         add_self_loops: bool = True
@@ -37,7 +37,7 @@ class VISNET(visnet.ViSNet):
     def __init__(
            self,
            max_z: int,
-           box: Tensor,
+           box: List,
            lmax: int = 1,
            vecnorm_type: Optional[str] = None,
            trainable_vecnorm: bool = False,
@@ -49,14 +49,12 @@ class VISNET(visnet.ViSNet):
            cutoff: float = 5.0,
            max_num_neighbors: int = 32,
            vertex: bool = False,
-           atomref: Optional[List] = None,
+           atomref: Optional[Tensor] = None,
            reduce_op: str = "sum",
            mean: float = 0.0,
            std: float = 1.0,
            add_self_loops: bool = True
        ) -> None:
-       
-       atomref = torch.tensor(atomref)
        
        super().__init__(lmax,
         vecnorm_type,
@@ -76,7 +74,7 @@ class VISNET(visnet.ViSNet):
         std,
         False)
        
-       self.representation_model = ViSNetBlock(box,
+       self.representation_model = ViSNetBlock(box, max_z, cutoff,
             lmax=lmax,
             vecnorm_type=vecnorm_type,
             trainable_vecnorm=trainable_vecnorm,
@@ -85,12 +83,17 @@ class VISNET(visnet.ViSNet):
             hidden_channels=hidden_channels,
             num_rbf=num_rbf,
             trainable_rbf=trainable_rbf,
-            max_z=max_z,
-            cutoff=cutoff,
             max_num_neighbors=max_num_neighbors,
             vertex=vertex,
        )
     
+       if atomref is None:
+           self.prior_model = None # set prior model to None, otherwise DDP complains about the weights in Atomref not contributing to grad
+       else:
+           self.prior_model = visnet.Atomref(atomref=atomref, max_z=max_z)
+
+       self.reset_parameters()
+    
     def forward(self, data):
-       z = data.h.argmax(dim=1)
+       z = data.z #data.h.argmax(dim=1)
        return super().forward(z, data.pos, data.batch)[0]

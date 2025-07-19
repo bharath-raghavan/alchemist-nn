@@ -6,6 +6,7 @@ from ..nn.argmax import ArgMax
 from ..utils.conversion import kelvin_to_lj, time_to_lj, dist_to_lj
 from ..nn.loss import Alchemical_NLL
 from ..nn.flow import LFFlow
+from ..nn.node import NodeModel
 
 class UnitsParams(BaseModel):
     time: str
@@ -104,22 +105,33 @@ class FlowParams(UnittedParams):
     def _convert(self):
         if self.energy_model_params.cutoff != None:
             self.energy_model_params.cutoff = dist_to_lj(self.energy_model_params.cutoff, unit=self.units.dist)
-        if self.energy_model_params.atomref != None :
-            self.energy_model_params.atomref = list(self.energy_model_params.atomref)
+        #if self.energy_model_params.atomref != None :
+        #    self.energy_model_params.atomref = list(self.energy_model_params.atomref)
         self.box = [dist_to_lj(float(i), unit=self.units.dist) for i in self.box]
         return self
             
     def get(self, node_nf):
         if self.node_nf is None:
             self.node_nf = node_nf
-        return LFFlow(self.n_iter,  ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.node_nf, self.node_hidden_layers, self.energy_model, self.box, self.prec, **self.energy_model_params.get())
+            
+        energy_networks = []
+        node_networks = []
+        node_force_networks = []
+        for i in range(self.n_iter):
+            energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy_model}"), f"{self.energy_model.upper()}")
+            energy_networks.append(energy_model_class(self.node_nf, self.box, **self.energy_model_params.get()))
+            node_networks.append(NodeModel(self.node_nf, 1, self.node_hidden_layers))
+            node_force_networks.append(NodeModel(self.node_nf, self.node_nf, self.node_hidden_layers))
+                
+        return LFFlow(energy_networks, node_networks, node_force_networks, ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.box, self.prec)
 
 class LossParams(BaseModel):
-    temp: float
-    softening: float
+    temp: Optional[float] = 300
+    softening: Optional[float] = 0
+    partition_func: Optional[float] = 10
     
     def get(self):
-        return Alchemical_NLL(kBT=kelvin_to_lj(self.temp), softening=self.softening)
+        return Alchemical_NLL(kBT=kelvin_to_lj(self.temp), partition_func=self.partition_func, softening=self.softening)
 
 class TrainingParams(BaseModel):
     num_epochs: int
