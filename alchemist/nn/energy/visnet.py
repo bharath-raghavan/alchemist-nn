@@ -1,39 +1,11 @@
-from typing import Optional, Tuple, List
+from typing import Optional, List
 import torch
-from torch import Tensor
-from torch.autograd import grad
-from torch.nn import Embedding
-from torch_geometric.nn.models import visnet
-from torch_geometric.utils import scatter
-from torch_geometric.nn import radius_graph
-import itertools
+from visnet.models.model import ViSNet
+from visnet.models.visnet_block import ViSNetBlock
+from visnet.models.output_modules import EquivariantScalar
 from .dist import PeriodicDistance
-
-class ViSNetBlock(visnet.ViSNetBlock):
-    def __init__(
-        self,
-        box: List,
-        max_z: int,
-        cutoff: float,
-        lmax: int = 1,
-        vecnorm_type: Optional[str] = None,
-        trainable_vecnorm: bool = False,
-        num_heads: int = 8,
-        num_layers: int = 6,
-        hidden_channels: int = 128,
-        num_rbf: int = 32,
-        trainable_rbf: bool = False,
-        max_num_neighbors: int = 32,
-        vertex: bool = False,
-        add_self_loops: bool = True
-    ) -> None:
-
-        super().__init__(lmax, vecnorm_type, trainable_vecnorm, num_heads, num_layers, hidden_channels, num_rbf, trainable_rbf, max_z, cutoff, max_num_neighbors, vertex)
-
-        self.distance = PeriodicDistance(cutoff, box, max_num_neighbors=max_num_neighbors, add_self_loops=add_self_loops)
-        self.reset_parameters()
             
-class VISNET(visnet.ViSNet):
+class VISNET(ViSNet):
     def __init__(
            self,
            max_z: int,
@@ -45,55 +17,50 @@ class VISNET(visnet.ViSNet):
            num_layers: int = 6,
            hidden_channels: int = 128,
            num_rbf: int = 32,
+           rbf_type="expnorm",
            trainable_rbf: bool = False,
+           activation="silu",
+           attn_activation="silu",
            cutoff: float = 5.0,
            max_num_neighbors: int = 32,
-           vertex: bool = False,
-           atomref: Optional[Tensor] = None,
+           vertex_type: str = "None",
+           atomref: Optional[List] = None,
            reduce_op: str = "sum",
-           mean: float = 0.0,
-           std: float = 1.0,
-           add_self_loops: bool = True
+           mean: Optional[float] = 0.0,
+           std: Optional[float] = 1.0,
+           loops: bool = True
        ) -> None:
        
-       super().__init__(lmax,
+       representation_model = ViSNetBlock(lmax,
         vecnorm_type,
         trainable_vecnorm,
         num_heads,
         num_layers,
         hidden_channels,
         num_rbf,
+        rbf_type,
         trainable_rbf,
+        activation,
+        attn_activation,
         max_z,
         cutoff,
         max_num_neighbors,
-        vertex,
-        atomref,
-        reduce_op,
-        mean,
-        std,
-        False)
-       
-       self.representation_model = ViSNetBlock(box, max_z, cutoff,
-            lmax=lmax,
-            vecnorm_type=vecnorm_type,
-            trainable_vecnorm=trainable_vecnorm,
-            num_heads=num_heads,
-            num_layers=num_layers,
-            hidden_channels=hidden_channels,
-            num_rbf=num_rbf,
-            trainable_rbf=trainable_rbf,
-            max_num_neighbors=max_num_neighbors,
-            vertex=vertex,
+        vertex_type,
        )
-    
+       representation_model.distance = PeriodicDistance(cutoff, box, max_num_neighbors=max_num_neighbors, add_self_loops=loops) # replace distance calculator with custom periodicdist version
+       output_model = EquivariantScalar(hidden_channels=hidden_channels)
        if atomref is None:
-           self.prior_model = None # set prior model to None, otherwise DDP complains about the weights in Atomref not contributing to grad
+           prior_model = None # set prior model to None, otherwise DDP complains about the weights in Atomref not contributing to grad
        else:
-           self.prior_model = visnet.Atomref(atomref=atomref, max_z=max_z)
+           prior_model = visnet.Atomref(atomref=torch.tensor(atomref), max_z=max_z)
 
-       self.reset_parameters()
+       super().__init__(representation_model,
+        output_model,
+        prior_model,
+        reduce_op,
+        torch.scalar_tensor(mean),
+        torch.scalar_tensor(std))
     
     def forward(self, data):
-       z = data.z #data.h.argmax(dim=1)
-       return super().forward(z, data.pos, data.batch)[0]
+       data.z = data.h.argmax(dim=1)
+       return super().forward(data)[0]
