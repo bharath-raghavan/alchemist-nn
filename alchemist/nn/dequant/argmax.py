@@ -1,10 +1,10 @@
 import torch
 from torch import nn
-from ..utils.helpers import one_hot, log_gaussian
+from ...utils.helpers import one_hot, log_gaussian
 import torch.nn.functional as F
-from .node import NodeModel
+from ..node.scalar import ScalarNodeModel
 
-class ArgMax(NodeModel):
+class ArgMax(ScalarNodeModel):
     def __init__(self, node_nf, hidden_nf, act_fn=nn.SiLU()):
         super().__init__(node_nf, node_nf*2, hidden_nf, act_fn)
         

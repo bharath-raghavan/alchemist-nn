@@ -2,11 +2,13 @@ from typing import Dict, Optional, List
 from pydantic import BaseModel, model_validator
 import importlib, yaml, json
 from ..data import transforms
-from ..nn.argmax import ArgMax
+from ..nn.dequant.argmax import ArgMax
 from ..utils.conversion import kelvin_to_lj, time_to_lj, dist_to_lj
-from ..nn.loss import Alchemical_NLL
-from ..nn.flow import LFFlow
-from ..nn.node import NodeModel
+from ..nn.flow.loss import Alchemical_NLL
+from ..nn.flow.model import FlowModel
+from ..nn.flow.network import NetworkWrapper
+from ..nn.node.scalar import ScalarNodeModel
+from ..nn.node.egnn import EGNN
 
 class UnitsParams(BaseModel):
     time: str
@@ -46,7 +48,18 @@ class DatasetParams(UnittedParams):
         
         return dataset_class(**dataset_args, transform=transforms.Compose(T))
 
-class EnergyModelParams(BaseModel):
+class NetworkModelParams(BaseModel):
+    def get(self):
+        ret = self.dict()
+        ret_keys = list(ret.keys())
+        for i in ret_keys:
+            if ret[i] is None or i == 'type':
+                ret.pop(i)
+        return ret
+        
+class EnergyModelParams(NetworkModelParams):
+    type: str
+    
     ## ViSNet
     lmax: Optional[int] = None
     vecnorm_type: Optional[str] = None
@@ -74,22 +87,18 @@ class EnergyModelParams(BaseModel):
     norm_diff : Optional[bool] = None
     tanh : Optional[bool] = None
     ##
-        
-    def get(self):
-        ret = self.dict()
-        ret_keys = list(ret.keys())
-        for i in ret_keys:
-            if ret[i] is None:
-                ret.pop(i)
-        return ret
-        
+
+class EGNNParams(NetworkModelParams):
+    hidden_nf: Optional[int] = 128
+    n_layers: Optional[int] = 3
+                
 class FlowParams(UnittedParams):
     dt: float = 1
     n_iter: int
     node_nf: Optional[int] = None
-    energy_model: str
-    node_hidden_layers: int
-    energy_model_params: EnergyModelParams
+    scalar_hidden_nf: int
+    energy: EnergyModelParams
+    egnn: EGNNParams
     box: List
     prec: int
     
@@ -103,10 +112,10 @@ class FlowParams(UnittedParams):
     
     @model_validator(mode='after')
     def _convert(self):
-        if self.energy_model_params.cutoff != None:
-            self.energy_model_params.cutoff = dist_to_lj(self.energy_model_params.cutoff, unit=self.units.dist)
-        #if self.energy_model_params.atomref != None :
-        #    self.energy_model_params.atomref = list(self.energy_model_params.atomref)
+        if self.energy.cutoff != None:
+            self.energy.cutoff = dist_to_lj(self.energy.cutoff, unit=self.units.dist)
+        if self.energy.atomref != None:
+            self.energy.atomref = list(self.energy.atomref)
         self.box = [dist_to_lj(float(i), unit=self.units.dist) for i in self.box]
         return self
             
@@ -114,16 +123,16 @@ class FlowParams(UnittedParams):
         if self.node_nf is None:
             self.node_nf = node_nf
             
-        energy_networks = []
-        node_networks = []
-        node_force_networks = []
+        networks = []
+
         for i in range(self.n_iter):
-            energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy_model}"), f"{self.energy_model.upper()}")
-            energy_networks.append(energy_model_class(self.node_nf, self.box, **self.energy_model_params.get()))
-            node_networks.append(NodeModel(self.node_nf, 1, self.node_hidden_layers))
-            node_force_networks.append(NodeModel(self.node_nf, self.node_nf, self.node_hidden_layers))
+            energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.upper()}")
+            energy_network = energy_model_class(self.node_nf, self.box, **self.energy.get())
+            node_network = ScalarNodeModel(self.node_nf, 1, self.scalar_hidden_nf)
+            node_force_network = EGNN(self.node_nf, self.egnn.hidden_nf, self.egnn.n_layers)
+            networks.append(NetworkWrapper(energy_network, node_network, node_force_network))
                 
-        return LFFlow(energy_networks, node_networks, node_force_networks, ArgMax(self.node_nf, self.node_hidden_layers), time_to_lj(self.dt, unit=self.units.time), self.box, self.prec)
+        return FlowModel(networks, ArgMax(self.node_nf, self.scalar_hidden_nf), time_to_lj(self.dt, unit=self.units.time), self.box, self.prec)
 
 class LossParams(BaseModel):
     temp: Optional[float] = 300

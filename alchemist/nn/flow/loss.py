@@ -1,6 +1,6 @@
 import math
 import torch
-from ..utils.helpers import log_gaussian
+from ...utils.helpers import log_gaussian
 
 class Alchemical_NLL:
     def __init__(self, kBT, partition_func=10, softening=0):

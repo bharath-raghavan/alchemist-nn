@@ -63,4 +63,4 @@ class VISNET(ViSNet):
     
     def forward(self, data):
        data.z = data.h.argmax(dim=1)
-       return super().forward(data)[0]
+       return super().forward(data)[0], self.representation_model.distance.edge_index, self.representation_model.distance.edge_vec

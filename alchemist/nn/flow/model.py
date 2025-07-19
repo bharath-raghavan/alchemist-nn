@@ -1,21 +1,16 @@
 import importlib
 import torch
 from torch.autograd import grad
-from ..utils.helpers import apply_pbc
+from ...utils.helpers import apply_pbc
 
-class LFFlow(torch.nn.Module):
-    def __init__(self, energy_networks, node_networks, node_force_networks, dequant_network, dt, box, prec):
+class FlowModel(torch.nn.Module):
+    def __init__(self, networks, dequant_network, dt, box, prec):
         super().__init__()
-        self.energy_networks = []
-        self.node_networks = []
-        self.node_force_networks = []
         self.register_buffer('box', torch.tensor(box))
         self.register_buffer('dt', torch.tensor(dt))
         self.register_buffer('dt_2', torch.tensor(0.5*dt))
         
-        self.energy_networks = torch.nn.ModuleList(energy_networks) 
-        self.node_networks = torch.nn.ModuleList(node_networks)
-        self.node_force_networks = torch.nn.ModuleList(node_force_networks)
+        self.networks = torch.nn.ModuleList(networks)
         
         self.dequantize = dequant_network
 
@@ -48,15 +43,13 @@ class LFFlow(torch.nn.Module):
         ldj = 0
         data.pos = self.pbc(data.pos) # put particles in box, just in case it is not TODO: print warning if pos changes here
         data.h, ldj = self.dequantize(data.h)
-        for Energy_nn, Node_nn, NodeForce_nn in zip(self.energy_networks, self.node_networks, self.node_force_networks):
+        for nn in self.networks:
             
             data.pos = self.pbc(data.pos + data.vel*self.dt)
             data.h = data.h + data.g*self.dt
             
-            Q = Node_nn(data.h)
-            G = NodeForce_nn(data.h)
-            E = Energy_nn(data)
-            F = LFFlow.get_force(E, data.pos)
+            Q, G, E = nn(data)
+            F = FlowModel.get_force(E, data.pos)
             
             data.vel = torch.exp(Q) * data.vel + F*self.dt
             data.g = data.g + G*self.dt
@@ -66,12 +59,10 @@ class LFFlow(torch.nn.Module):
         return data, ldj
 
     def reverse(self, data):
-        for Energy_nn, Node_nn, NodeForce_nn in zip(reversed(self.energy_networks), reversed(self.node_networks), reversed(self.node_force_networks)):
+        for nn in reversed(self.networks):
             
-            Q = Node_nn(data.h)
-            G = NodeForce_nn(data.h)
-            E = Energy_nn(data)
-            F = LFFlow.get_force(E, data.pos, reverse=True)
+            Q, G, E = nn(data)
+            F = FlowModel.get_force(E, data.pos, reverse=True)
             
             data.g = data.g - G*self.dt
             data.vel = (data.vel - F*self.dt)/torch.exp(Q)

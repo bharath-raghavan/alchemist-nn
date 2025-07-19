@@ -56,22 +56,22 @@ class PeriodicDistance(torch.nn.Module):
         
         pos_all_periodic_images, id_mapping, periodic_batch = get_periodic_images_within(pos, self.box, self.cutoff, batch) # replicate positions 27 times and find those within cutoff
         
-        edge_index = radius_graph(
+        self.edge_index = radius_graph(
             pos_all_periodic_images,
             r=self.cutoff,
             batch=periodic_batch,
             loop=self.add_self_loops,
             max_num_neighbors=self.max_num_neighbors,
         )
-        edge_index[0] = id_mapping[edge_index[0]]
-        edge_index[1] = id_mapping[edge_index[1]]
-        edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
+        self.edge_index[0] = id_mapping[self.edge_index[0]]
+        self.edge_index[1] = id_mapping[self.edge_index[1]]
+        self.edge_vec = pos[self.edge_index[0]] - pos[self.edge_index[1]]
 
         if self.add_self_loops:
-            mask = edge_index[0] != edge_index[1]
-            edge_weight = torch.zeros(edge_vec.size(0), device=edge_vec.device, dtype=edge_vec.dtype)
-            edge_weight[mask] = torch.linalg.vector_norm(edge_vec[mask], dim=-1)
+            mask = self.edge_index[0] != self.edge_index[1]
+            self.edge_weight = torch.zeros(self.edge_vec.size(0), device=self.edge_vec.device, dtype=self.edge_vec.dtype)
+            self.edge_weight[mask] = torch.linalg.vector_norm(self.edge_vec[mask], dim=-1)
         else:
-            edge_weight = torch.linalg.vector_norm(edge_vec.clone(), dim=-1)
+            self.edge_weight = torch.linalg.vector_norm(self.edge_vec.clone(), dim=-1)
 
-        return edge_index, edge_weight, edge_vec
+        return self.edge_index, self.edge_weight, self.edge_vec
