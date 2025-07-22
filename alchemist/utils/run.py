@@ -76,13 +76,17 @@ class Runner:
         self.checkpoint_path = config.checkpoint
             
         if os.path.exists(self.checkpoint_path) and self.checkpoint_path != None:
+            if self.world_rank == 0: print("Loading from checkpoint")
             checkpoint = torch.load(self.checkpoint_path, weights_only=False)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.start_epoch = checkpoint['epoch']+1
         else:
             checkpoint = None
         
         if self.ddp: self.model = DDP(self.model, device_ids=[self.local_rank])
     
         if train:
+            self.start_epoch = 0
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(config.training.lr))
     
             if config.training.scheduler_type:
@@ -99,7 +103,6 @@ class Runner:
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 if self.scheduler: self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
                 
-            self.start_epoch = 0
             self.num_epochs = self.start_epoch+config.training.num_epochs
             self.log_interval = config.training.log_interval
             self.accum_iter = config.training.accum_iter
