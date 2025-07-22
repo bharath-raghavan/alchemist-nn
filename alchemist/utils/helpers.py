@@ -34,7 +34,3 @@ def one_hot(index, num_classes=None, dtype=None):
     out = torch.zeros((index.size(0), num_classes), dtype=dtype,
                       device=index.device)
     return out.scatter_(1, index.unsqueeze(1), 1)
-    
-def elem_to_one_hot(x, atom_types, dtype=None):
-    type_idx = [atom_types[i] for i in z]
-    return one_hot(torch.tensor(type_idx), num_classes=len(atom_types), dtype=dtype)

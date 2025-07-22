@@ -40,36 +40,43 @@ class FlowModel(torch.nn.Module):
         data.pos = self.pbc(data.pos) # put particles in box, just in case it is not TODO: print warning if pos changes here
         data.pos.requires_grad_(True) # to calculate derivate of energy
         
-        data.h, ldj = self.embedding(data.z)
-        data.g = torch.normal(0, 1, size=data.h.shape, dtype=self.dtype)
+        h, ldj = self.embedding(data.z)
+        g = torch.normal(0, 1, size=h.shape, dtype=self.dtype)
         
         for nn in self.networks:
             
             data.pos = self.pbc(data.pos + data.vel*self.dt)
-            data.h = data.h + data.g*self.dt
+            h = h + g*self.dt
             
-            Q, G, E = nn(data)
+            Q, G, E = nn(data, h)
             F = FlowModel.get_force(E, data.pos)
             
             data.vel = torch.exp(Q) * data.vel + F*self.dt
-            data.g = data.g + G*self.dt
+            g = g + G*self.dt
             
             ldj += Q.sum()
 
-        return data, ldj
+        return data, torch.cat([h,g], dim=1), ldj
 
-    def reverse(self, data):
+    def reverse(self, data, x=None):
+        if x != None:
+            h, g = x.chunk(2, dim=1)
+        else:
+            size = (data.pos.shape[0], self.networks[0].node_network.network[0].weight.shape[1])
+            h = torch.normal(0, 1, size=size, dtype=self.dtype)
+            g = torch.normal(0, 1, size=h.shape, dtype=self.dtype)
+        
         for nn in reversed(self.networks):
             
-            Q, G, E = nn(data)
+            Q, G, E = nn(data, h)
             F = FlowModel.get_force(E, data.pos, reverse=True)
             
-            data.g = data.g - G*self.dt
+            g = g - G*self.dt
             data.vel = (data.vel - F*self.dt)/torch.exp(Q)
             
-            data.h = data.h - data.g*self.dt
+            h = h - g*self.dt
             data.pos = self.pbc(data.pos - data.vel*self.dt)
-            
-        data.z = self.embedding.reverse(data.h)
+        
+        data.z = self.embedding.reverse(h)
         
         return data

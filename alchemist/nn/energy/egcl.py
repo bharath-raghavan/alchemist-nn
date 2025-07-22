@@ -24,4 +24,25 @@ class EGCL(E_GCL):
         edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
         h, _ = self.node_model(h, edge_index, edge_feat, node_attr)
         return h
-            
+        
+class EGNN(torch.nn.Module):
+    """Equivariant Graph Neural Net
+    Adapted from X
+    """
+
+    def __init__(self, node_nf, hidden_nf, n_layers, act_fn=torch.nn.SiLU(), attention=False):
+        super().__init__()
+        self.n_layers = n_layers
+        self.embedding_in = nn.Linear(node_nf, hidden_nf)
+        self.embedding_out = nn.Linear(hidden_nf, node_nf)
+        networks = []
+        for i in range(0, n_layers):
+            networks.append(EGCL(hidden_nf, hidden_nf, hidden_nf, act_fn=act_fn, attention=attention))
+        self.networks = torch.nn.ModuleList(networks) 
+
+    def forward(self, h, edge_index, coord_diff):
+        h = self.embedding_in(h)
+        for egcl in self.networks:
+            h = egcl(h, edge_index, coord_diff)
+        h = self.embedding_out(h)
+        return h            

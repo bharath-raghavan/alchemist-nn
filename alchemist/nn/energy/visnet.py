@@ -13,14 +13,13 @@ class MockEmbedding(torch.nn.Module):
     def reset_parameters(self):
         pass
 
-    def forward(self, z): # dummy x
+    def forward(self, z): # dummy z
         return self.h
     
 
 class VISNET(ViSNet):
     def __init__(
            self,
-           max_z: int,
            box: List,
            lmax: int = 1,
            vecnorm_type: Optional[str] = None,
@@ -38,8 +37,6 @@ class VISNET(ViSNet):
            vertex_type: str = "None",
            atomref: Optional[List] = None,
            reduce_op: str = "sum",
-           mean: Optional[float] = 0.0,
-           std: Optional[float] = 1.0,
            loops: bool = True
        ) -> None:
        
@@ -54,7 +51,7 @@ class VISNET(ViSNet):
         trainable_rbf,
         activation,
         attn_activation,
-        max_z,
+        100, # max_z dummy
         cutoff,
         max_num_neighbors,
         vertex_type,
@@ -64,19 +61,15 @@ class VISNET(ViSNet):
        representation_model.neighbor_embedding.embedding = MockEmbedding()
        
        output_model = EquivariantScalar(hidden_channels=hidden_channels)
-       if atomref is None:
-           prior_model = None # set prior model to None, otherwise DDP complains about the weights in Atomref not contributing to grad
-       else:
-           prior_model = visnet.Atomref(atomref=torch.tensor(atomref), max_z=max_z)
-
+       
        super().__init__(representation_model,
         output_model,
-        prior_model,
+        None,
         reduce_op,
-        torch.scalar_tensor(0.0),
-        torch.scalar_tensor(1.0))
+        torch.scalar_tensor(0.0), # mean
+        torch.scalar_tensor(1.0)) # std
     
-    def forward(self, data):
-       self.representation_model.embedding.h = data.h
-       self.representation_model.neighbor_embedding.embedding.h = data.h
-       return super().forward(data)[0], self.representation_model.distance.edge_index, self.representation_model.distance.edge_vec
+    def forward(self, data, x):
+       self.representation_model.embedding.x = x
+       self.representation_model.neighbor_embedding.embedding.x = x
+       return super().forward(data)[0], self.representation_model.distance.edges

@@ -7,10 +7,8 @@ from ..utils.helpers import one_hot
 from ..utils.constants import atom_types
 
 class Data:
-    def __init__(self, z=None, h=None, g=None, pos=None, vel=None, N=None, label=None, device='cpu'):
+    def __init__(self, z=None, pos=None, vel=None, N=None, label=None, device='cpu'):
         self.z = z
-        self.h = h
-        self.g = g
         self.pos = pos
         self.vel = vel
         self.N = N
@@ -24,8 +22,6 @@ class Data:
         end_id = self.N[i].item()+start_id
         return Data(
                 z=self.z[start_id:end_id],
-                h=self.h[start_id:end_id,:],
-                g=self.g[start_id:end_id,:],
                 pos=self.pos[start_id:end_id,:],
                 vel=self.vel[start_id:end_id,:],
                 N=self.N[i],
@@ -58,16 +54,12 @@ class Data:
     
     def clone(self):
         z = self.z.clone()
-        h = self.h.clone()
-        g = self.g.clone()
         pos = self.pos.clone()
         vel = self.vel.clone()
         N = self.N.clone()
         
         return Data(
                 z=z,
-                h=h,
-                g=g,
                 pos=pos,
                 vel=vel,
                 N=N,
@@ -77,16 +69,12 @@ class Data:
             
     def to(self, device):
         z = self.z.to(device)
-        h = self.h.to(device)
-        g = self.g.to(device)
         pos = self.pos.to(device)
         vel = self.vel.to(device)
         N = self.N.to(device)
         
         return Data(
                 z=z,
-                h=h,
-                g=g,
                 pos=pos,
                 vel=vel,
                 N=N,
@@ -122,8 +110,6 @@ class DataLoader(torch.utils.data.DataLoader):
         
         return Data(
                 z=torch.cat([d.z for d in dataset]),
-                h=torch.cat([d.h for d in dataset]),
-                g=torch.cat([d.g for d in dataset]),
                 pos=torch.cat([d.pos for d in dataset]),
                 vel=torch.cat([d.vel for d in dataset]),
                 N=torch.tensor([d.N for d in dataset]),
@@ -163,7 +149,6 @@ class BaseDataset(torch.utils.data.Dataset, ABC):
     def _get_data(self, z, pos, vel, label):
         atom_types = {z:i for i,z in enumerate(self.atom_types)}
         type_idx = [atom_types[i] for i in z]
-        h = one_hot(torch.tensor(type_idx), num_classes=len(atom_types), dtype=self.dtype)
 
         if vel is None:
             vel = torch.zeros_like(pos)
@@ -172,8 +157,6 @@ class BaseDataset(torch.utils.data.Dataset, ABC):
 
         data = Data(
             z=torch.tensor(type_idx),
-            h=h,
-            g=torch.normal(0, 1, size=h.shape, dtype=self.dtype),
             pos=pos,
             vel=vel,
             N=N,

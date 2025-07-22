@@ -9,7 +9,7 @@ from ..nn.flow.loss import Alchemical_NLL
 from ..nn.flow.model import FlowModel
 from ..nn.flow.network import NetworkWrapper
 from ..nn.node.scalar import ScalarNodeModel
-from ..nn.node.egnn import EGNN
+from ..nn.node.egcl import EGCL
 
 class UnitsParams(BaseModel):
     time: str
@@ -123,22 +123,22 @@ class FlowParams(UnittedParams):
         self.box = [dist_to_lj(float(i), unit=self.units.dist) for i in self.box]
         return self
             
-    def get(self, atom_types):
+    def get(self, node_nf):
         networks = []
         
         if self.prec == 64:
             dtype = torch.float64
         else:
-            dtype = 32
+            dtype = torch.float32
         
         for i in range(self.n_iter):
             energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.upper()}")
-            energy_network = energy_model_class(self.node_nf, self.box, **self.energy.get())
-            node_network = ScalarNodeModel(self.scalar_hidden_nf, 1, self.scalar_hidden_nf)
-            node_force_network = EGNN(self.scalar_hidden_nf, self.egnn.hidden_nf, self.egnn.n_layers)
+            energy_network = energy_model_class(self.box, **self.energy.get())
+            node_network = ScalarNodeModel(self.scalar_hidden_nf, 1, self.scalar_hidden_nf+10)
+            node_force_network = EGCL(self.scalar_hidden_nf, self.egnn.hidden_nf)
             networks.append(NetworkWrapper(energy_network, node_network, node_force_network))
                 
-        return FlowModel(networks, Default(dtype, self.node_nf, self.scalar_hidden_nf), time_to_lj(self.dt, unit=self.units.time), self.box, dtype)
+        return FlowModel(networks, Default(node_nf, dtype, self.scalar_hidden_nf), time_to_lj(self.dt, unit=self.units.time), self.box, dtype)
 
 class LossParams(BaseModel):
     temp: Optional[float] = 300

@@ -1,18 +1,18 @@
 import torch
 from torch import nn
-from ...utils.helpers import elem_to_one_hot, log_gaussian
+from ...utils.helpers import one_hot, log_gaussian
 import torch.nn.functional as F
 from ..node.scalar import ScalarNodeModel
 
 class ArgMax(ScalarNodeModel):
-    def __init__(self, atom_types, dtype, hidden_nf, act_fn=nn.SiLU()):
+    def __init__(self, node_nf, dtype, hidden_nf, act_fn=nn.SiLU()):
         node_nf = len(atom_types)
         super().__init__(node_nf, node_nf*2, hidden_nf, act_fn)
-        self.atom_types = {z:i for i,z in enumerate(atom_types)}
+        self.node_nf = node_nf
         self.dtype = dtype
         
     def forward(self, z):
-        h = elem_to_one_hot(z, self.atom_types, dtype=self.dtype)
+        h = one_hot(z, num_classes=self.node_nf, dtype=self.dtype)
     
         net_out = self.network(h)
         log_scale, translate = torch.chunk(net_out, chunks=2, dim=-1)
