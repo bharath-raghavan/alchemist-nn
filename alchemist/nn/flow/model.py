@@ -4,7 +4,7 @@ from torch.autograd import grad
 from ...utils.helpers import apply_pbc
 
 class FlowModel(torch.nn.Module):
-    def __init__(self, networks, dequant_network, dt, box, prec):
+    def __init__(self, networks, embedding, dt, box, dtype):
         super().__init__()
         self.register_buffer('box', torch.tensor(box))
         self.register_buffer('dt', torch.tensor(dt))
@@ -12,12 +12,11 @@ class FlowModel(torch.nn.Module):
         
         self.networks = torch.nn.ModuleList(networks)
         
-        self.dequantize = dequant_network
-
-        if prec == 64:
-            self.to(torch.double)
-        else:
-            self.to(torch.float)
+        self.embedding = embedding
+        
+        self.dtype = dtype
+        
+        self.to(self.dtype)
     
     @staticmethod
     def get_force(y, pos, reverse=False):
@@ -38,11 +37,12 @@ class FlowModel(torch.nn.Module):
         return apply_pbc(pos, self.box)
     
     def forward(self, data):
+        data.pos = self.pbc(data.pos) # put particles in box, just in case it is not TODO: print warning if pos changes here
         data.pos.requires_grad_(True) # to calculate derivate of energy
         
-        ldj = 0
-        data.pos = self.pbc(data.pos) # put particles in box, just in case it is not TODO: print warning if pos changes here
-        data.h, ldj = self.dequantize(data.h)
+        data.h, ldj = self.embedding(data.z)
+        data.g = torch.normal(0, 1, size=data.h.shape, dtype=self.dtype)
+        
         for nn in self.networks:
             
             data.pos = self.pbc(data.pos + data.vel*self.dt)
@@ -70,6 +70,6 @@ class FlowModel(torch.nn.Module):
             data.h = data.h - data.g*self.dt
             data.pos = self.pbc(data.pos - data.vel*self.dt)
             
-        data.h = self.dequantize.reverse(data.h)
+        data.z = self.embedding.reverse(data.h)
         
         return data

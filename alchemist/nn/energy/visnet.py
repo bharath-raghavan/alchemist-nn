@@ -4,7 +4,19 @@ from visnet.models.model import ViSNet
 from visnet.models.visnet_block import ViSNetBlock
 from visnet.models.output_modules import EquivariantScalar
 from .dist import PeriodicDistance
-            
+
+class MockEmbedding(torch.nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+    
+    def reset_parameters(self):
+        pass
+
+    def forward(self, z): # dummy x
+        return self.h
+    
+
 class VISNET(ViSNet):
     def __init__(
            self,
@@ -47,7 +59,10 @@ class VISNET(ViSNet):
         max_num_neighbors,
         vertex_type,
        )
-       representation_model.distance = PeriodicDistance(cutoff, box, max_num_neighbors=max_num_neighbors, add_self_loops=loops) # replace distance calculator with custom periodicdist version
+       representation_model.distance = PeriodicDistance(cutoff, box, max_num_neighbors=max_num_neighbors, add_self_loops=loops) # replace distance calculator with custom periodic dist version
+       representation_model.embedding = MockEmbedding()
+       representation_model.neighbor_embedding.embedding = MockEmbedding()
+       
        output_model = EquivariantScalar(hidden_channels=hidden_channels)
        if atomref is None:
            prior_model = None # set prior model to None, otherwise DDP complains about the weights in Atomref not contributing to grad
@@ -58,9 +73,10 @@ class VISNET(ViSNet):
         output_model,
         prior_model,
         reduce_op,
-        torch.scalar_tensor(mean),
-        torch.scalar_tensor(std))
+        torch.scalar_tensor(0.0),
+        torch.scalar_tensor(1.0))
     
     def forward(self, data):
-       data.z = data.h.argmax(dim=1)
+       self.representation_model.embedding.h = data.h
+       self.representation_model.neighbor_embedding.embedding.h = data.h
        return super().forward(data)[0], self.representation_model.distance.edge_index, self.representation_model.distance.edge_vec

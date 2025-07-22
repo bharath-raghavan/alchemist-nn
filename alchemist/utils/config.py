@@ -1,8 +1,9 @@
 from typing import Dict, Optional, List
 from pydantic import BaseModel, model_validator
 import importlib, yaml, json
+import torch
 from ..data import transforms
-from ..nn.dequant.argmax import ArgMax
+from ..nn.embedding.default import Default
 from ..utils.conversion import kelvin_to_lj, time_to_lj, dist_to_lj
 from ..nn.flow.loss import Alchemical_NLL
 from ..nn.flow.model import FlowModel
@@ -78,7 +79,7 @@ class EnergyModelParams(NetworkModelParams):
     add_self_loops: Optional[bool] = None
     ##
     
-    ## EGCL
+    ## EGNN
     hidden_nf: Optional[int] = None
     act_fn: Optional[str] = None
     coords_weight: Optional[int] = None
@@ -91,11 +92,14 @@ class EnergyModelParams(NetworkModelParams):
 class EGNNParams(NetworkModelParams):
     hidden_nf: Optional[int] = 128
     n_layers: Optional[int] = 3
+
+class EGNNParams(NetworkModelParams):
+    hidden_nf: Optional[int] = 128
+    n_layers: Optional[int] = 3
                 
 class FlowParams(UnittedParams):
     dt: float = 1
     n_iter: int
-    node_nf: Optional[int] = None
     scalar_hidden_nf: int
     energy: EnergyModelParams
     egnn: EGNNParams
@@ -119,20 +123,22 @@ class FlowParams(UnittedParams):
         self.box = [dist_to_lj(float(i), unit=self.units.dist) for i in self.box]
         return self
             
-    def get(self, node_nf):
-        if self.node_nf is None:
-            self.node_nf = node_nf
-            
+    def get(self, atom_types):
         networks = []
-
+        
+        if self.prec == 64:
+            dtype = torch.float64
+        else:
+            dtype = 32
+        
         for i in range(self.n_iter):
             energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.upper()}")
             energy_network = energy_model_class(self.node_nf, self.box, **self.energy.get())
-            node_network = ScalarNodeModel(self.node_nf, 1, self.scalar_hidden_nf)
-            node_force_network = EGNN(self.node_nf, self.egnn.hidden_nf, self.egnn.n_layers)
+            node_network = ScalarNodeModel(self.scalar_hidden_nf, 1, self.scalar_hidden_nf)
+            node_force_network = EGNN(self.scalar_hidden_nf, self.egnn.hidden_nf, self.egnn.n_layers)
             networks.append(NetworkWrapper(energy_network, node_network, node_force_network))
                 
-        return FlowModel(networks, ArgMax(self.node_nf, self.scalar_hidden_nf), time_to_lj(self.dt, unit=self.units.time), self.box, self.prec)
+        return FlowModel(networks, Default(dtype, self.node_nf, self.scalar_hidden_nf), time_to_lj(self.dt, unit=self.units.time), self.box, dtype)
 
 class LossParams(BaseModel):
     temp: Optional[float] = 300
