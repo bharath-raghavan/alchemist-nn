@@ -5,16 +5,14 @@ import torch.nn.functional as F
 class Floor(torch.nn.Module):
     def __init__(self, node_nf, dtype, dequant_scale=1):
         super().__init__()
-        self.node_nf = node_nf
+        if node_nf > dim:
+            print("error")
+        self.dim = dim
         self.dequant_scale = dequant_scale
         self.dtype = dtype
-
-    @property
-    def out_dim(self):
-        return self.node_nf
                     
     def forward(self, z):
-        h = one_hot(z, num_classes=self.node_nf, dtype=self.dtype)
-        return z + self.dequant_scale*torch.rand_like(z).detach(), 0
+        x = one_hot(z, num_classes=self.dim, dtype=self.dtype)
+        return x + self.dequant_scale*torch.rand_like(x).detach(), 0
     
-    def reverse(self, z): return torch.floor(z)
+    def reverse(self, x): return torch.argmax(torch.floor(x), dim=-1)

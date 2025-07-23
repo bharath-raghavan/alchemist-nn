@@ -5,31 +5,28 @@ import torch.nn.functional as F
 from ..node.scalar import ScalarNodeModel
 
 class Argmax(ScalarNodeModel):
-    def __init__(self, node_nf, dtype, hidden_nf, act_fn=nn.SiLU()):
-        node_nf = len(atom_types)
-        super().__init__(node_nf, node_nf*2, hidden_nf, act_fn)
-        self.node_nf = node_nf
+    def __init__(self, node_nf, dtype, hidden_nf, dim, act_fn=nn.SiLU()):
+        if node_nf > dim:
+            print("error")
+        super().__init__(dim, dim*2, hidden_nf, act_fn)
         self.dtype = dtype
-    
-    @property
-    def out_dim(self):
-        return self.node_nf
+        self.dim = dim
     
     def forward(self, z):
-        h = one_hot(z, num_classes=self.node_nf, dtype=self.dtype)
-    
-        net_out = self.network(h)
+        atom_feat = one_hot(z, num_classes=self.dim, dtype=self.dtype)
+        
+        net_out = self.network(atom_feat)
         log_scale, translate = torch.chunk(net_out, chunks=2, dim=-1)
         u = translate + torch.randn(h.size(), device=h.device) * log_scale.exp()
-        #u = torch.randn(h.size(), device=h.device)
+        
         log_q = log_gaussian(u) - log_scale.sum()
         
         T = (h * u).sum(-1, keepdim=True)
-        z = h * u + (1 - h) * (T - F.softplus(T - u))
+        out = h * u + (1 - h) * (T - F.softplus(T - u))
         ldj = (1 - h) * F.logsigmoid(T - u)
         log_q = log_q - ldj.sum()
         
-        return z, log_q
+        return out, log_q
     
     def reverse(self, z):
         return torch.argmax(z, dim=-1)

@@ -112,8 +112,8 @@ class Runner:
     def _train_backprop(self, data, accum_iter, batch_idx):
         # passes and weights update
         with torch.set_grad_enabled(True):
-            out, ldj = self.model(data)
-            loss = self.nll(out, ldj)
+            out, x, ldj = self.model(data)
+            loss = self.nll(out, x, ldj)
             
             if torch.isnan(loss):
                 raise ValueError("Loss has become NaN")

@@ -132,8 +132,8 @@ class FlowParams(UnittedParams):
         for i in range(self.n_iter):
             energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.title()}")
             energy_network = energy_model_class(self.box, **self.energy.get())
-            node_network = ScalarNodeModel(embed_network.out_dim, 1, self.node.velscale)
-            node_force_network = EGCL(embed_network.out_dim, self.node.update)
+            node_network = ScalarNodeModel(embed_network.dim, 1, self.node.velscale)
+            node_force_network = EGCL(embed_network.dim//2, self.node.update)
             networks.append(NetworkWrapper(energy_network, node_network, node_force_network))
         
         return FlowModel(networks, embed_network, time_to_lj(self.dt, unit=self.units.time), self.box, dtype)
