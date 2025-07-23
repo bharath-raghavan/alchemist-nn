@@ -21,11 +21,11 @@ def get_periodic_images_within(pos, box, r_cut, batch):
     
     return pos_all_periodic_images, id_mapping, batch
 
-class Edges:
+class Edges(torch.nn.Module):
     def __init__(self, index, coord_diff):
         self.row = index[0]
         self.col = index[1]
-        self.dist = torch.sum((coord_diff)**2, 1).unsqueeze(1)
+        self.coord_diff = coord_diff
 
 class PeriodicDistance(torch.nn.Module):
     def __init__(
