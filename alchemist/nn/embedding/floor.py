@@ -8,7 +8,11 @@ class Floor(torch.nn.Module):
         self.node_nf = node_nf
         self.dequant_scale = dequant_scale
         self.dtype = dtype
-        
+
+    @property
+    def out_dim(self):
+        return self.node_nf
+                    
     def forward(self, z):
         h = one_hot(z, num_classes=self.node_nf, dtype=self.dtype)
         return z + self.dequant_scale*torch.rand_like(z).detach(), 0

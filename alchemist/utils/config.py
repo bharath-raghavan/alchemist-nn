@@ -49,16 +49,7 @@ class DatasetParams(UnittedParams):
         
         return dataset_class(**dataset_args, transform=transforms.Compose(T))
 
-class NetworkModelParams(BaseModel):
-    def get(self):
-        ret = self.dict()
-        ret_keys = list(ret.keys())
-        for i in ret_keys:
-            if ret[i] is None or i == 'type':
-                ret.pop(i)
-        return ret
-        
-class EnergyModelParams(NetworkModelParams):
+class NetworkModelParams(BaseModel):    
     type: str
     
     ## ViSNet
@@ -82,27 +73,31 @@ class EnergyModelParams(NetworkModelParams):
     ## EGNN
     hidden_nf: Optional[int] = None
     act_fn: Optional[str] = None
-    coords_weight: Optional[int] = None
     attention : Optional[bool] = None
-    clamp: Optional[bool] = None
-    norm_diff : Optional[bool] = None
-    tanh : Optional[bool] = None
     ##
+    
+    ## Default Embedding
+    dim: Optional[int] = None
+    ##
+    
+    def get(self):
+        ret = self.dict()
+        ret_keys = list(ret.keys())
+        for i in ret_keys:
+            if ret[i] is None or i == 'type':
+                ret.pop(i)
+        return ret
 
-class EGNNParams(NetworkModelParams):
-    hidden_nf: Optional[int] = 128
-    n_layers: Optional[int] = 3
-
-class EGNNParams(NetworkModelParams):
-    hidden_nf: Optional[int] = 128
-    n_layers: Optional[int] = 3
+class NodeUpdateParams(BaseModel):
+    update: Optional[int] = 128
+    velscale: Optional[int] = 128
                 
 class FlowParams(UnittedParams):
     dt: float = 1
     n_iter: int
-    scalar_hidden_nf: int
-    energy: EnergyModelParams
-    egnn: EGNNParams
+    energy: NetworkModelParams
+    embed: NetworkModelParams
+    node: NodeUpdateParams
     box: List
     prec: int
     
@@ -131,14 +126,17 @@ class FlowParams(UnittedParams):
         else:
             dtype = torch.float32
         
+        embed_model_class = getattr(importlib.import_module(f"alchemist.nn.embedding.{self.embed.type}"), f"{self.embed.type.title()}")
+        embed_network = embed_model_class(node_nf, dtype, **self.embed.get())
+        
         for i in range(self.n_iter):
-            energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.upper()}")
+            energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.title()}")
             energy_network = energy_model_class(self.box, **self.energy.get())
-            node_network = ScalarNodeModel(self.scalar_hidden_nf, 1, self.scalar_hidden_nf+10)
-            node_force_network = EGCL(self.scalar_hidden_nf, self.egnn.hidden_nf)
+            node_network = ScalarNodeModel(embed_network.out_dim, 1, self.node.velscale)
+            node_force_network = EGCL(embed_network.out_dim, self.node.update)
             networks.append(NetworkWrapper(energy_network, node_network, node_force_network))
-                
-        return FlowModel(networks, Default(node_nf, dtype, self.scalar_hidden_nf), time_to_lj(self.dt, unit=self.units.time), self.box, dtype)
+        
+        return FlowModel(networks, embed_network, time_to_lj(self.dt, unit=self.units.time), self.box, dtype)
 
 class LossParams(BaseModel):
     temp: Optional[float] = 300

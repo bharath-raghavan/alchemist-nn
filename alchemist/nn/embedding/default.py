@@ -1,9 +1,14 @@
 import torch
 
 class Default(torch.nn.Module):
-    def __init__(self, node_nf, dtype, hidden_channels):
+    def __init__(self, node_nf, dtype, dim):
         super().__init__()
-        self.network = torch.nn.Embedding(node_nf, hidden_channels, dtype=dtype)
+        self.network = torch.nn.Embedding(node_nf, dim, dtype=dtype)
+        self.hidden_channels = dim
+    
+    @property
+    def out_dim(self):
+        return self.hidden_channels
         
     def forward(self, z):
         return self.network(z), 0

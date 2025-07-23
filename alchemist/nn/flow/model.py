@@ -41,7 +41,7 @@ class FlowModel(torch.nn.Module):
         data.pos.requires_grad_(True) # to calculate derivate of energy
         
         h, ldj = self.embedding(data.z)
-        g = torch.normal(0, 1, size=h.shape, dtype=self.dtype)
+        g = torch.normal(0, 1, size=h.shape, dtype=self.dtype, device=data.device)
         
         for nn in self.networks:
             
@@ -63,8 +63,8 @@ class FlowModel(torch.nn.Module):
             h, g = x.chunk(2, dim=1)
         else:
             size = (data.pos.shape[0], self.networks[0].node_network.network[0].weight.shape[1])
-            h = torch.normal(0, 1, size=size, dtype=self.dtype)
-            g = torch.normal(0, 1, size=h.shape, dtype=self.dtype)
+            h = torch.normal(0, 1, size=size, dtype=self.dtype, device=data.device)
+            g = torch.normal(0, 1, size=h.shape, dtype=self.dtype, device=data.device)
         
         for nn in reversed(self.networks):
             

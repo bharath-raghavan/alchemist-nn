@@ -17,7 +17,7 @@ class MockEmbedding(torch.nn.Module):
         return self.h
     
 
-class VISNET(ViSNet):
+class Visnet(ViSNet):
     def __init__(
            self,
            box: List,
@@ -69,7 +69,7 @@ class VISNET(ViSNet):
         torch.scalar_tensor(0.0), # mean
         torch.scalar_tensor(1.0)) # std
     
-    def forward(self, data, x):
-       self.representation_model.embedding.x = x
-       self.representation_model.neighbor_embedding.embedding.x = x
+    def forward(self, data, h):
+       self.representation_model.embedding.h = h
+       self.representation_model.neighbor_embedding.embedding.h = h
        return super().forward(data)[0], self.representation_model.distance.edges

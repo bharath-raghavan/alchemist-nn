@@ -4,13 +4,17 @@ from ...utils.helpers import one_hot, log_gaussian
 import torch.nn.functional as F
 from ..node.scalar import ScalarNodeModel
 
-class ArgMax(ScalarNodeModel):
+class Argmax(ScalarNodeModel):
     def __init__(self, node_nf, dtype, hidden_nf, act_fn=nn.SiLU()):
         node_nf = len(atom_types)
         super().__init__(node_nf, node_nf*2, hidden_nf, act_fn)
         self.node_nf = node_nf
         self.dtype = dtype
-        
+    
+    @property
+    def out_dim(self):
+        return self.node_nf
+    
     def forward(self, z):
         h = one_hot(z, num_classes=self.node_nf, dtype=self.dtype)
     
