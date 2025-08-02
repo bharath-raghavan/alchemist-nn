@@ -172,8 +172,8 @@ class BaseDataset(torch.utils.data.Dataset, ABC):
 
         data = Data(
             z=torch.tensor(type_idx),
-            h=h,
-            g=torch.normal(0, 1, size=h.shape, dtype=self.dtype),
+            h=torch.tensor([]),
+            g=torch.tensor([]),
             pos=pos,
             vel=vel,
             N=N,

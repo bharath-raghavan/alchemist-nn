@@ -128,11 +128,11 @@ class FlowParams(UnittedParams):
         for i in range(self.n_iter):
             energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.upper()}")
             energy_network = energy_model_class(self.node_nf, self.box, **self.energy.get())
-            node_network = ScalarNodeModel(self.node_nf, 1, self.scalar_hidden_nf)
-            node_force_network = EGNN(self.node_nf, self.egnn.hidden_nf, self.egnn.n_layers)
+            node_network = ScalarNodeModel(2*self.scalar_hidden_nf, 1, self.scalar_hidden_nf)
+            node_force_network = EGNN(self.scalar_hidden_nf, self.egnn.hidden_nf, self.egnn.n_layers)
             networks.append(NetworkWrapper(energy_network, node_network, node_force_network))
                 
-        return FlowModel(networks, ArgMax(self.node_nf, self.scalar_hidden_nf), time_to_lj(self.dt, unit=self.units.time), self.box, self.prec)
+        return FlowModel(networks, self.node_nf, self.scalar_hidden_nf, time_to_lj(self.dt, unit=self.units.time), self.box, self.prec)
 
 class LossParams(BaseModel):
     temp: Optional[float] = 300
