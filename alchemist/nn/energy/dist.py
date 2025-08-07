@@ -21,7 +21,7 @@ def get_periodic_images_within(pos, box, r_cut, batch):
     
     return pos_all_periodic_images, id_mapping, batch
 
-class Edges(torch.nn.Module):
+class Edges:
     def __init__(self, index, coord_diff):
         self.row = index[0]
         self.col = index[1]
