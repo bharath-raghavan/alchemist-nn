@@ -62,10 +62,11 @@ class EGCL(nn.Module):
         out = self.node_nn(agg)
         return out
             
-    def forward(self, h, edges): 
-        radial = torch.sum((edges.coord_diff)**2, 1).unsqueeze(1)
-        row = edges.row
-        col = edges.col
+    def forward(self, pos, h, edge_index): 
+        coord_diff = pos[edge_index[0]] - pos[edge_index[1]]
+        radial = torch.sum((coord_diff)**2, 1).unsqueeze(1)
+        row = edge_index[0]
+        col = edge_index[1]
         
         edge_attr = self.edge_model(h[row], h[col], radial)
         

@@ -9,10 +9,10 @@ class NetworkWrapper(torch.nn.Module):
         self.node_network = node_network
         self.node_force_network = node_force_network
     
-    def forward(self, data, h, g):
+    def forward(self, data, edges, h, g):
         x = torch.cat([h,g], dim=1)
         Q = self.node_network(x)
-        E, edges = self.energy_network(data, x)
+        E = self.energy_network(data, x, edges)
         G = self.node_force_network(h, edges)
         
         return Q, G, E

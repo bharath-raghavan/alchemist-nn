@@ -22,6 +22,7 @@ class DatasetParams(UnittedParams):
     type: str
     batch_size: int = 1
     params: Dict
+    prec: int
 
     @model_validator(mode='before')
     def _dump_params(cls, values):
@@ -72,12 +73,7 @@ class NetworkModelParams(BaseModel):
     
     ## EGNN
     hidden_nf: Optional[int] = None
-    act_fn: Optional[str] = None
-    attention : Optional[bool] = None
-    ##
-    
-    ## Default Embedding
-    dim: Optional[int] = None
+    n_layers: Optional[int] = None
     ##
     
     def get(self):
@@ -87,17 +83,16 @@ class NetworkModelParams(BaseModel):
             if ret[i] is None or i == 'type':
                 ret.pop(i)
         return ret
-
-class NodeUpdateParams(BaseModel):
-    update: Optional[int] = 128
-    velscale: Optional[int] = 128
+  
+class EdgeParams(BaseModel):
+    cutoff: float
                 
 class FlowParams(UnittedParams):
     dt: float = 1
     n_iter: int
     energy: NetworkModelParams
-    embed: NetworkModelParams
-    node: NodeUpdateParams
+    dim: Optional[int] = None
+    edge: EdgeParams
     box: List
     prec: int
     
@@ -126,17 +121,12 @@ class FlowParams(UnittedParams):
         else:
             dtype = torch.float32
         
-        embed_model_class = getattr(importlib.import_module(f"alchemist.nn.embedding.{self.embed.type}"), f"{self.embed.type.title()}")
-        embed_network = embed_model_class(node_nf, dtype, **self.embed.get())
-        
+        energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.title()}")
+        energy_networks = []  
         for i in range(self.n_iter):
-            energy_model_class = getattr(importlib.import_module(f"alchemist.nn.energy.{self.energy.type}"), f"{self.energy.type.title()}")
-            energy_network = energy_model_class(self.box, **self.energy.get())
-            node_network = ScalarNodeModel(embed_network.dim, 1, self.node.velscale)
-            node_force_network = EGCL(embed_network.dim//2, self.node.update)
-            networks.append(NetworkWrapper(energy_network, node_network, node_force_network))
+            energy_networks.append( energy_model_class(self.dim, **self.energy.get()) )
         
-        return FlowModel(networks, embed_network, time_to_lj(self.dt, unit=self.units.time), self.box, dtype)
+        return FlowModel(energy_networks, node_nf, self.dim, time_to_lj(self.dt, unit=self.units.time), self.edge.cutoff, self.box, dtype)
 
 class LossParams(BaseModel):
     temp: Optional[float] = 300
@@ -155,6 +145,7 @@ class TrainingParams(BaseModel):
     log_interval: int
     batch_size: int = 100
     accum_iter: int = 0
+    amp: bool = False
 
 class ConfigParams(BaseModel):
     checkpoint: Optional[str] = None

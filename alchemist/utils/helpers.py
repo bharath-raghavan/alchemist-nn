@@ -1,6 +1,6 @@
 import math
 import torch
-
+    
 def log_gaussian(z):
     return -0.5*( (z**2).sum() + math.log(2*math.pi) )
     

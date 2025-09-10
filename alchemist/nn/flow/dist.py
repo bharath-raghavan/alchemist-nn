@@ -22,10 +22,10 @@ def get_periodic_images_within(pos, box, r_cut, batch):
     return pos_all_periodic_images, id_mapping, batch
 
 class Edges:
-    def __init__(self, index, coord_diff):
-        self.row = index[0]
-        self.col = index[1]
-        self.coord_diff = coord_diff
+    def __init__(self, index, diff, weight):
+        self.index = index
+        self.diff = diff
+        self.weight = weight
 
 class PeriodicDistance(torch.nn.Module):
     def __init__(
@@ -43,8 +43,7 @@ class PeriodicDistance(torch.nn.Module):
         
     def forward(
         self,
-        pos: Tensor,
-        batch: Tensor
+        data
     ) -> Tuple[Tensor, Tensor, Tensor]:
         r"""Computes the pairwise distances between atoms in the molecule.
 
@@ -59,6 +58,8 @@ class PeriodicDistance(torch.nn.Module):
             edge_vec (torch.Tensor): The vector differences between connected
                 nodes.
         """
+        
+        pos, batch = data.pos, data.batch
         
         pos_all_periodic_images, id_mapping, periodic_batch = get_periodic_images_within(pos, self.box, self.cutoff, batch) # replicate positions 27 times and find those within cutoff
         
@@ -79,7 +80,5 @@ class PeriodicDistance(torch.nn.Module):
             edge_weight[mask] = torch.linalg.vector_norm(edge_vec[mask], dim=-1)
         else:
             edge_weight = torch.linalg.vector_norm(edge_vec.clone(), dim=-1)
-        
-        self.edges = Edges(edge_index, edge_vec)
-        
-        return edge_index, edge_weight, edge_vec
+
+        return Edges(edge_index, edge_vec, edge_weight)

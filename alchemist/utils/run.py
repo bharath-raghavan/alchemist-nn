@@ -82,13 +82,15 @@ class Runner:
             self.start_epoch = checkpoint['epoch']+1
         else:
             checkpoint = None
+            self.start_epoch = 0
         
         if self.ddp: self.model = DDP(self.model, device_ids=[self.local_rank])
     
         if train:
-            self.start_epoch = 0
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(config.training.lr))
-    
+            self.amp = config.training.amp
+            self.scaler = torch.amp.GradScaler()
+            
             if config.training.scheduler_type:
                 scheduler_class = getattr(importlib.import_module("torch.optim.lr_scheduler"), config.training.scheduler_type)
                 self.scheduler = scheduler_class(self.optimizer, **config.training.scheduler_params)
@@ -101,6 +103,7 @@ class Runner:
 
             if checkpoint:
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
                 if self.scheduler: self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
                 
             self.num_epochs = self.start_epoch+config.training.num_epochs
@@ -112,18 +115,25 @@ class Runner:
     def _train_backprop(self, data, accum_iter, batch_idx):
         # passes and weights update
         with torch.set_grad_enabled(True):
-            out, x, ldj = self.model(data)
-            loss = self.nll(out, x, ldj)
+            # Mixed precision forward
+            with torch.autocast(enabled=self.amp, device_type="cuda", dtype=torch.bfloat16):
+                out, h, g = self.model(data)
+                loss = self.nll(out, h, g)
             
-            if torch.isnan(loss):
-                raise ValueError("Loss has become NaN")
-            
-            loss = loss/accum_iter
-            loss.backward()
+                if torch.isnan(loss):
+                    raise ValueError("Loss has become NaN")
+                
+                if self.ddp: # Tie all params into graph to avoid DDP "unused parameter" mismatch
+                    loss = loss + 0.0 * sum(p.sum() for p in self.model.parameters())
+                
+                loss = loss/accum_iter
+                
+            self.scaler.scale(loss).backward()
 
             # weights update
             if ((batch_idx + 1) % accum_iter == 0) or (batch_idx + 1 == len(self.train_loader)):
-                self.optimizer.step()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
                 if self.scheduler: self.scheduler.step()
                 self.optimizer.zero_grad()
 
@@ -165,7 +175,8 @@ class Runner:
                 to_save = {
                        'epoch': epoch,
                        'model_state_dict': self.model.module.state_dict(),
-                       'optimizer_state_dict': self.optimizer.state_dict()
+                       'optimizer_state_dict': self.optimizer.state_dict(),
+                       'scaler_state_dict': self.scaler.state_dict(),
                    }
                 if self.scheduler: to_save['scheduler_state_dict'] = self.scheduler.state_dict()
                 
